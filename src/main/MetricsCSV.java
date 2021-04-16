@@ -1,82 +1,62 @@
 package main;
 
-import java.io.*;
-import java.nio.file.*;
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Scanner;
+
+import org.json.JSONException;
+
 
 public class MetricsCSV {
 	
-	private static String pathBookkeeper = "C:/Users/Simone Benedetti/Documents/Programmazione JAVA/Bookkeeper";
-	private static String pathStorm = "C:\\Users\\Simone Benedetti\\Documents\\Programmazione JAVA\\Storm";
+	private static ArrayList<String> id;
 	
-	public static void createCsv(String nameProj) {
-		PrintWriter pw = null;
-        try {
-            pw = new PrintWriter(new File(nameProj + "Metrics.csv"));
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-        if(pw != null) {
-        	StringBuilder builder = new StringBuilder();
-        	String columnNamesList = "Version,ClassName,Bugginess";
-        	// No need give the headers Like: id, Name on builder.append
-        	builder.append(columnNamesList +"\n");
-        	builder.append("1"+",");
-        	builder.append("Chola");
-        	builder.append('\n');
-        	pw.write(builder.toString());
-        	pw.close();
-        	System.out.println("done!");
-        }
-		
-	}
-	
-	
-	public static void pathClasses(String path,String namePrj) {
-		
-		List<String> result = null;
-		
-		Path dir = Paths.get(path);
-		
-		try (Stream<Path> walk = Files.walk(dir,Integer.MAX_VALUE,FileVisitOption.FOLLOW_LINKS)) {
-           
-            result = walk.filter(s -> s.toString().endsWith(".java")).map(String::valueOf).collect(Collectors.toList());
-            
-            
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-		
-		
-		try (FileWriter writer = new FileWriter(namePrj+"Output.txt")){
-			String s;
-			for(String str: result) {
-					s = str.substring(57+namePrj.length());
-				writer.write(s + System.lineSeparator());
-			} 
-		  
-		}catch (IOException e) {
+	public static boolean getBugginess(String nameProj, String pathProject, Integer j, String pathClass) {
+		//nameProj written in MAIUSC
+		try {
+			id = (ArrayList<String>) RetrieveTicketsID.getIdCommit(nameProj,j);
+		} catch (JSONException|IOException e) {
+			
 			e.printStackTrace();
+		} 
+		
+		for(int i=0; i<id.size(); i++) {
+			try {
+				IdCommit.commitString(id.get(i), pathProject, nameProj , i,":");
+				IdCommit.commitString(id.get(i), pathProject, nameProj , i," ");
+				IdCommit.commitString(id.get(i), pathProject, nameProj , i,"]");
+				
+			} catch (IOException e) {
+				
+				e.printStackTrace();
+			}
+			
 		}
-	
 		
+		File file = new File("Student.txt");
+
+		try (Scanner scanner = new Scanner(file)){
+
+		    //now read the file line by line...
+		    while (scanner.hasNextLine()) {
+		        String line = scanner.nextLine();
+		        if(line.contains(pathClass)) { 
+		            return true;
+		        }
+		    }
+		} catch(FileNotFoundException e) { 
+		    
+		}
+		
+		
+		return false;
 	}
-		
-		
-		
-	
-	
-	
-	
 
 	public static void main(String[] args) {
-		
-		//pathClasses(pathBookkeeper,"Bookkeeper");
-		pathClasses(pathStorm,"Storm");
-	}
 	
+
+	}
+
 }
-
-
