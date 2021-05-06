@@ -13,33 +13,37 @@ public class IdCommit {
 	private static final Logger logger = Logger.getLogger(IdCommit.class.getName());
 	private static final String ERRORSTR = "Exception found";
 	private static final String COMMIT = "commit";
+	private static Integer count = 0;
 	
 	private IdCommit() {
 	    throw new IllegalStateException("Utility class");
 	}
 	
-	public static void commitString(String wordToSearch, String project,String fileName, int i, String character) throws IOException{
+	public static void commitString(String wordToSearch, String project,String fileName, String character) throws IOException{
 		
 		//character can be :, ,]
 		String s;
         Process p;
         String outname = fileName + "TotalCommit.txt";
         FileWriter result;
+        
         	
-         p = Runtime.getRuntime().exec("cmd /c cd "+project+"&& git log --grep="+wordToSearch + character +" --date=iso-strict --name-status --stat HEAD --abbrev-commit");
+         p = Runtime.getRuntime().exec("cmd /c cd "+project+"&& git log --grep="+wordToSearch + character +" --date=iso-strict --name-status --stat HEAD --abbrev-commit --date-order");
          BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-         if(i != 0) {
-        	 result = new FileWriter(outname,true);
-         }else {
-        	 result = new FileWriter(outname);
-         }
+         result = new FileWriter(outname,true);
+         
          try {
-        	
+        	 
             	while ((s = br.readLine()) != null) {
             		if(s.startsWith(COMMIT)) {
+            			count = count + 1;
             			s = s.substring(COMMIT.length());
             			result.write(wordToSearch);
             			result.write(s);
+            		}else if(s.startsWith("Date:")) {
+            			s = s.substring(7,18);
+            			result.write(s);
+            			result.write(" "+count.toString());
             			result.append("\n");
             		}
                 }	
@@ -60,12 +64,6 @@ public class IdCommit {
     
 		
 	public static void main (String[] args) {
-   	 try {
-		commitString("BOOKKEEPER-1","C:\\Users\\Simone Benedetti\\Documents\\Programmazione JAVA\\Bookkeeper","Bookkeeper",1,":");
-	} catch (IOException e) {
-		
-		e.printStackTrace();
-	}
     }
        
 

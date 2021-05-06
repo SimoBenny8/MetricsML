@@ -51,7 +51,7 @@ public class RetrieveTicketsID {
        }
    }
    
-   public static List<String> getIdCommit(String projName, Integer i) throws IOException, JSONException{
+   public static List<String> getTicketId(String projName, Integer i) throws IOException, JSONException{
 	  
 	  
 	   ArrayList<String> al = new ArrayList<>();  
@@ -63,7 +63,7 @@ public class RetrieveTicketsID {
          //Only gets a max of 1000 at a time, so must do this multiple times if bugs >1000
          j = i + 1000;
          String url = "https://issues.apache.org/jira/rest/api/2/search?jql=project=%22"
-                + projName + "%22AND%20issueType%20=%22Bug%22AND%20status%20in%20(Resolved%2C%20Closed)%20AND%22resolution%22=%22fixed%22&fields=key,resolutiondate,versions,created&startAt="
+                + projName + "%22AND%20issueType%20=%22Bug%22AND%20status%20in%20(Resolved%2C%20Closed)%20AND%20resolution%20=%20fixed%20ORDER%20BY%20created%20ASC%20&fields=key,resolutiondate,versions,created&startAt="
                 + i.toString() + "&maxResults=" + j.toString();
          JSONObject json = readJsonFromUrl(url);
          JSONArray issues = json.getJSONArray("issues");
@@ -80,31 +80,31 @@ public class RetrieveTicketsID {
    }
    
    
-   public static String getAV(String ticket) throws IOException, JSONException{
-		   
+   public static String getIV(String ticket) throws IOException, JSONException{
+	   //TODO: trasformarla in versione numerica 
 	  
 	   	 Integer i = 0;
-	   	 String name = "";
+	   	 
       
          String url = "https://issues.apache.org/jira/rest/api/latest/issue/"+ ticket;
          JSONObject json = readJsonFromUrl(url);
          JSONObject fields = json.getJSONObject("fields");
          JSONArray versions = fields.getJSONArray("versions");
-         for (i = 0; i < versions.length(); i++ ) {
-            
-            if (versions.getJSONObject(i).has("name")) {
-            		name = versions.getJSONObject(i).get("name").toString();
+         if(versions.length() != 0 ) {
+            if (versions.getJSONObject(0).has("name")) {
+            		return versions.getJSONObject(i).get("name").toString();
             }
-                 
-            }
+         }else {
+        	 return null;
+         }
+          
          
-      
-      return name;
+      return null;
       
    }
    
    public static String getFV(String ticket) throws IOException, JSONException{
-	   
+	   //TODO: vedere caso con più versioni 
 	   //TODO: If name = "", use closing commit date of the ticket and compare it with commit date of the versions 
 	   Integer i = 0;
 	   String name = "";
@@ -126,6 +126,7 @@ public class RetrieveTicketsID {
     
  }
    
+   //Used for calculating OV
    public static String creationDateTicket(String ticket) throws JSONException, IOException {
 	   
 	   String date = "";
@@ -135,7 +136,7 @@ public class RetrieveTicketsID {
        String createdDate = fields.get("created").toString();
        date = createdDate.substring(0,10);
      
-       System.out.println(date);
+      // System.out.println(date);
 	   
 	   
 	   return date;
@@ -146,8 +147,9 @@ public class RetrieveTicketsID {
    public static void main(String[] args) {
 	   
 	   try {
-//		getIdCommit("STORM",0);
-		   creationDateTicket("STORM-235");
+	//List<String> ls = getTicketId("STORM",0);
+	 System.out.println(getIV("BOOKKEEPER-442"));
+		   //creationDateTicket("STORM-235");
 	} catch (JSONException|IOException e) {
 		
 		e.printStackTrace();

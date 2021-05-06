@@ -37,7 +37,7 @@ public class GetReleaseInfo {
 
 	   
 	   public static boolean getReleaseinCSV(String projName) throws IOException, JSONException {
-		   
+		   //projName MAIUSC
 		   String outname = projName + "VersionInfo.csv";
 		 //Fills the arraylist with releases dates and orders them
 		   //Ignores releases with missing dates
