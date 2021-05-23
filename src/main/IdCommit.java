@@ -28,7 +28,7 @@ public class IdCommit {
         FileWriter result;
         
         	
-         p = Runtime.getRuntime().exec("cmd /c cd "+project+"&& git log --grep="+wordToSearch + character +" --date=iso-strict --name-status --stat HEAD --abbrev-commit --date-order");
+         p = Runtime.getRuntime().exec("cmd /c cd "+project+"&& git log --grep="+wordToSearch + character +" --date=iso-strict --name-status --abbrev-commit --reverse");
          BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
          result = new FileWriter(outname,true);
          
@@ -64,6 +64,9 @@ public class IdCommit {
     
 		
 	public static void main (String[] args) {
+		
+		Integer iv = (int) Math.round(4.5);
+		logger.log(Level.INFO,"numero: {0}",iv);
     }
        
 

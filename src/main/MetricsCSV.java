@@ -3,7 +3,6 @@ package main;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -19,12 +18,15 @@ import java.util.logging.Logger;
 
 import org.json.JSONException;
 
+import metrics.MetricsNumber;
+
 
 public class MetricsCSV {
 	
-	private static ArrayList<String> id;
+	private ArrayList<String> id;
 	private static final Logger logger = Logger.getLogger(MetricsCSV.class.getName());
 	private static final String CMD = "cmd /c cd ";
+	private static Double[] p = {0.0,1.0,0.667,0.667,0.667,0.778,1.25,1.271};
 	
 	
 	public MetricsCSV(String nameProj, String pathProject, Integer j) {
@@ -32,7 +34,7 @@ public class MetricsCSV {
 				
 		//get ticket ID from Jira
 				try {
-					RetrieveTicketsID.getTicketId(nameProj,j);
+					id =(ArrayList<String>) RetrieveTicketsID.getTicketId(nameProj,j);
 				} catch (JSONException|IOException e) {
 					logger.log(Level.WARNING,"error getting ticket ID");
 					e.printStackTrace();
@@ -91,8 +93,8 @@ public class MetricsCSV {
 						logger.log(Level.INFO,"rd not null and av: {0}", av);
 						//applying proportion moving window Integer.parseInt(info[3])
 						if(av == null) {
-							logger.log(Level.INFO,"av null: calling proportion");
-							Integer p = MetricsCSV.proportionMovingWindow(nameProj, 417);
+							//logger.log(Level.INFO,"av null: calling proportion");
+							//Integer p = MetricsCSV.proportionIncremental(nameProj,numVersion);
 							fv = dateToVersion(info[2],nameProj);
 							logger.log(Level.INFO,"fv when av is null: {0}", fv);
 							Integer ov = dateToVersion(RetrieveTicketsID.creationDateTicket(info[0]),nameProj);
@@ -100,7 +102,7 @@ public class MetricsCSV {
 							
 							
 							if(!fv.equals(ov)) {
-								iv = ((fv-ov)*p);
+								iv = (int) Math.round((double)fv - (double)(fv-ov)*p[numVersion - 1]);
 								logger.log(Level.INFO,"iv calcolata: {0}", iv);
 								
 							}else {
@@ -138,38 +140,45 @@ public class MetricsCSV {
 		return ((numVersion < fv) && (numVersion >= iv));
 	}
 	
-	public static Integer proportionMovingWindow(String nameProj,Integer count) throws IOException, JSONException, ParseException {
+	public static Double proportionIncremental(String nameProj, Integer version) throws IOException, JSONException, ParseException {
 		
 		String outname = nameProj + "TotalCommit.txt";
         
-		Integer onePercent = ((int) Math.ceil((double) count/100.0));
-		Integer totalOnePercent = ((int) Math.ceil((double) count/100.0));
-		logger.log(Level.INFO,"valore onePercent = {0}", onePercent);
+		//Integer onePercent = ((int) Math.ceil((double) count/100.0));
+		//Integer totalOnePercent = ((int) Math.ceil((double) count/100.0));
+		//logger.log(Level.INFO,"valore onePercent = {0}", onePercent);
         Double p = (double) 0;
+        Integer count = 0;
         String s;
        
-        
         try(BufferedReader rd = new BufferedReader(new FileReader(outname))){
-        	while ((s = rd.readLine()) != null && !onePercent.equals(0)) {
+        	while ((s = rd.readLine()) != null) {
        			String[] info = s.split(" ");
-       			String ivString = RetrieveTicketsID.getIV(info[0]);
-       			Integer iv = stringToVersion(nameProj,ivString);
-       			logger.log(Level.INFO,"calcoli proportion: iv = {0}", iv);
-       			Integer fv = dateToVersion(info[2],nameProj);
-       			logger.log(Level.INFO,"calcoli proportion: fv = {0}", fv);
-				Integer ov = dateToVersion(RetrieveTicketsID.creationDateTicket(info[0]),nameProj);
-       			logger.log(Level.INFO,"calcoli proportion: ov = {0}", ov);
-       			if(iv != null && !fv.equals(ov) && !fv.equals(iv)) {
-       				onePercent -= 1;
-       				logger.log(Level.INFO,"riduco onePercent di uno");
-       				p = p + ((double)(fv-iv)/(double)(fv-ov));
+       			Integer dateToVersionCommit = dateToVersion(info[2],nameProj);
+       			if(dateToVersionCommit <= version) {
+       				String ivString = RetrieveTicketsID.getIV(info[0]);
+       				Integer iv = stringToVersion(nameProj,ivString);
+       				logger.log(Level.INFO,"calcoli proportion: iv = {0}", iv);
+       				Integer fv = dateToVersion(info[2],nameProj);
+       				logger.log(Level.INFO,"calcoli proportion: fv = {0}", fv);
+       				Integer ov = dateToVersion(RetrieveTicketsID.creationDateTicket(info[0]),nameProj);
+       				logger.log(Level.INFO,"calcoli proportion: ov = {0}", ov);
+       				if(iv != null && !fv.equals(ov) && !fv.equals(iv)) {
+       					count++;
+       					p = p + ((double)(fv-iv)/(double)(fv-ov));
+       				}
        			}
+       			
        		}
        	}
         
         
-        System.out.println(p/((double) totalOnePercent));
-		return ((int) (p/((double) totalOnePercent)));
+        
+        if(count != 0) {
+        	return  (p/((double) count));
+        }else { 
+        	return 0.0;
+        }
 		
 	}
 	
@@ -229,16 +238,20 @@ public class MetricsCSV {
 		
 	}
 	
-	public static void writeOnFile(BufferedWriter rw, String namePrj, Integer i) {
+	public static void writeOnFile(BufferedWriter rw, String namePrj) {
 		
 		String s;
 		
-		try(BufferedReader rd = new BufferedReader(new FileReader("class"+namePrj.toLowerCase()+i.toString()+".txt"))){
+		try(BufferedReader rd = new BufferedReader(new FileReader("class"+namePrj.toLowerCase()+".txt"))){
 			while ((s = rd.readLine()) != null) {
-				String[] info = s.split("/");
-				 System.out.println(info[info.length - 1]);
-				rw.append(i.toString()+ " "+ s + " ");
-				rw.append(classAffectedByBugginess(info[info.length - 1],"BOOKKEEPER", i).toString());
+				String[] info = s.split(" ");
+				String[] infoClass = info[1].split("/");
+				System.out.println(infoClass[infoClass.length - 1]);
+				MetricsNumber mn = new MetricsNumber();
+				Integer[] metrics = mn.calculateMetrics(namePrj,Integer.parseInt(info[0]),info[1]);
+				
+				rw.append(info[0]+ ","+ info[1] + ","+metrics[0] +","+metrics[1]+","+metrics[2]+","+metrics[3]+",");
+				rw.append(classAffectedByBugginess(infoClass[infoClass.length - 1],"BOOKKEEPER", Integer.parseInt(info[0])).toString());
 				rw.append("\n");
 				rw.flush();
 			}
@@ -286,6 +299,8 @@ public class MetricsCSV {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
+		return null;
 			
 	}
 
@@ -293,29 +308,34 @@ public class MetricsCSV {
 		
 		String namePrj = "BOOKKEEPER";
 		
+		//p = new Double[8];
+		
 			//new MetricsCSV("BOOKKEEPER", "C:\\Users\\Simone Benedetti\\Documents\\Bookkeeper", 0);
+	/*for(Integer i= 0; i<8; i++) {	
+		try {
+			p[i] = MetricsCSV.proportionIncremental(namePrj, i+1);
+		} catch (JSONException | IOException | ParseException e) {
+			
+			e.printStackTrace();
+		}
+	}
+		
+		
+	for(Integer i= 0; i<8; i++) {
+		logger.log(Level.INFO,"calcolo proportion: p = {0}", p[i]);
+	}*/
 	
-		for (Integer i = 1; i< 8; i++) {
-			try(BufferedWriter rw = new BufferedWriter(new FileWriter("classAndBuggyness.txt", true))){	
+		
+			try(BufferedWriter rw = new BufferedWriter(new FileWriter("classAndMetrics.txt", true))){	
 				
-				writeOnFile(rw, namePrj, i);
+				writeOnFile(rw, namePrj);
 				
 			} catch (IOException e1) {
 				System.out.println("ERRORE IN SCRITTURA");
 				e1.printStackTrace();
 			}
 			
-		}
-		
-		
-		
-		
-		/*try {
-				System.out.println(getBugginess("BOOKKEEPER","AutoRecoveryMain.java", 5));
-			} catch (JSONException | IOException e) {
-				
-				e.printStackTrace();
-			}*/
+
 		
 
 	}
