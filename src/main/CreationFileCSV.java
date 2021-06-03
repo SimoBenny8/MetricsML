@@ -39,8 +39,10 @@ public class CreationFileCSV {
 			info.remove(3); //remove fourth version of bookkeeper
 		}else {
 			info.remove(4);
-			info.remove(7);//ninth version of storm
+			info.remove(8);//ninth version of storm
 		}
+		
+		
 	}
 	
 	public static List<String> getInfoVersions(String nameProj,Integer position) throws JSONException, IOException{
@@ -159,7 +161,7 @@ public class CreationFileCSV {
 		
 		List<String> commitId = new ArrayList<>();
 		
-		for(Integer i = 0; i<((lv.size())/2)+1; i++) {
+		for(Integer i = 0; i<((lv.size())/2); i++) {
 			
 			try {
 				commitId.add(idVersionClass(pathName, lv.get(i)));

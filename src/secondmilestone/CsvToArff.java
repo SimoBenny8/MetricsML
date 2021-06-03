@@ -8,22 +8,25 @@ import weka.core.converters.ArffSaver;
 import weka.core.converters.CSVLoader;
 
 public class CsvToArff {
-
-	public static void arffCreation() throws IOException {
-		File projectClasses = new File("csvFile.csv");
+	
+	private static String[] proj = {"Bookkeeper","Storm"};
+	private static String path = "src/Files/";
+	
+	public static void arffCreation(String path,String proj) throws IOException {
+		File projectClasses = new File(path+proj);
 		if (projectClasses.exists()) {
 			CSVLoader loader = new CSVLoader();
-			loader.setFieldSeparator(";");
+			loader.setFieldSeparator(",");
 		    loader.setSource(projectClasses);
 		    Instances data = loader.getDataSet();//get instances object
 
-		    data.deleteAttributeAt(1);//delete name project
+		    data.deleteAttributeAt(0);//delete name project
 		    
 		    // save ARFF
 		    ArffSaver saver = new ArffSaver();
 		    saver.setInstances(data);//set the dataset we want to convert
 		    //and save as ARFF
-		    saver.setFile(new File("csvFile.arff"));
+		    saver.setFile(new File(proj.toUpperCase()+"_Dataset.arff"));
 		    saver.writeBatch();
 		}
 		
@@ -33,6 +36,15 @@ public class CsvToArff {
 	public static void main(String[] args) {
 		
 		
+		for(String s: proj) {	
+		
+			try {
+				arffCreation(path,s);
+			} catch (IOException e) {
+				
+				e.printStackTrace();
+			}
+		}
 	}
 
 }

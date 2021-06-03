@@ -175,7 +175,7 @@ public class MetricsNumber {
 					
 						// Print the contents of the DiffEntries
 							for( DiffEntry entry : entries ) {
-								if (entry.getNewPath().contains(className)) {
+								if (entry.getOldPath().contains(className)) {
 									updateOtherMetrics(entries,repo,commit,className);
 									updateMetrics(entry,diffFormatter);
 								}

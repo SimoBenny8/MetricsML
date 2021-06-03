@@ -354,7 +354,7 @@ public class MetricsCSV {
 		}
 		*/
 		
-		try(BufferedWriter rw = new BufferedWriter(new FileWriter(namePrj+"_CSV"+".csv", true))){	
+		try(BufferedWriter rw = new BufferedWriter(new FileWriter(namePrj+"_Dataset"+".txt", true))){	
 			
 			for(Integer i = 0; i<columnsCsv.length - 1; i++) {
 				rw.append(columnsCsv[i] + ",");
