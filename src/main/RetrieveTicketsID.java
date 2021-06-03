@@ -51,13 +51,13 @@ public class RetrieveTicketsID {
        }
    }
    
-   public static List<String> getTicketId(String projName, Integer i) throws IOException, JSONException{
+   public static List<String> getTicketId(String projName) throws IOException, JSONException{
 	  
 	  
 	   ArrayList<String> al = new ArrayList<>();  
 	   Integer j = 0;
+	   Integer i = 0;
 	   Integer total = 1;
-	   //TODO: Check if For ticket > 1000 insert i equal to 1000
       //Get JSON API for closed bugs w/ AV in the project
       do {
          //Only gets a max of 1000 at a time, so must do this multiple times if bugs >1000

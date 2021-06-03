@@ -2,14 +2,18 @@ package metrics;
 
 
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import org.apache.commons.io.IOUtils;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
@@ -18,17 +22,21 @@ import org.eclipse.jgit.diff.Edit;
 import org.eclipse.jgit.diff.EditList;
 import org.eclipse.jgit.diff.RenameDetector;
 import org.eclipse.jgit.errors.RevisionSyntaxException;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectLoader;
 import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.patch.FileHeader;
 import org.eclipse.jgit.patch.HunkHeader;
 import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.revwalk.filter.CommitTimeRevFilter;
 import org.eclipse.jgit.revwalk.filter.RevFilter;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.TreeWalk;
+import org.eclipse.jgit.treewalk.filter.PathFilter;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 import org.json.JSONException;
 
@@ -45,14 +53,17 @@ public class MetricsNumber {
 	private Integer chgSetSize = 0;
 	private Integer maxChgSetSize = 0;
 	private Integer locDeleted = 0;
+	private Integer locTouched = 0;
+	private Integer loc = 0;
+	private Integer numCommit = 0;
 	
-	public void calculateMetrics(String nameProj,Integer version,String className,List<String> dateVersion) {
+	public Repository setup(String nameProj) {
 		
 		
 		FileRepositoryBuilder builder = new FileRepositoryBuilder();
-		//ObjectReader reader;
 		String repoFolder = pathName+nameProj+"/.git";
 		Repository repo = null;
+		
 		try {
 			repo = builder.setGitDir(new File(repoFolder)).readEnvironment().findGitDir().build();
 		} catch (IOException e1) {
@@ -60,80 +71,113 @@ public class MetricsNumber {
 			e1.printStackTrace();
 		}
 		
-		//try(BufferedReader rd = new BufferedReader(new FileReader("commitId"+nameProj+version.toString()+".txt"))){
+		return repo;
+	}
+	
+	public synchronized void updateEditType(Edit edit) {
+		switch (edit.getType()) {
+		case INSERT:
+			this.locAdded += edit.getLengthB();
+			if(this.maxLocAdded < edit.getLengthB()) {
+				this.maxLocAdded = edit.getLengthB();
+			}
+			break;
+
+		case DELETE:
+			this.locDeleted += edit.getLengthA();
+			break;
+
+		case REPLACE:
+			int diff = edit.getLengthA() - edit.getLengthB();
+			if (diff > 0) {
+				this.locAdded += edit.getLengthA();
+				if(this.maxLocAdded < edit.getLengthA()) {
+					this.maxLocAdded = edit.getLengthA();
+				}
+				this.locDeleted += edit.getLengthB();
+			} else {
+				this.locDeleted += edit.getLengthA();
+				this.locAdded += edit.getLengthB();
+				if(this.maxLocAdded < edit.getLengthB()) {
+					this.maxLocAdded = edit.getLengthB();
+				}
+			}
+			break;
+
+		case EMPTY:
+			break;
+	}
+	}
+	
+	
+	public synchronized void updateMetrics(DiffEntry entry,DiffFormatter diffFormatter) throws IOException {
+		
+		FileHeader fileHeader = diffFormatter.toFileHeader( entry );
+		List<? extends HunkHeader> hunks = fileHeader.getHunks();
+		for( HunkHeader hunk : hunks ) {
+			EditList edits = hunk.toEditList();
+				for (Edit edit : edits) {
+					this.locTouched += 1;
+					updateEditType(edit);
+				}
+		}
+		this.churn = this.churn + (this.locAdded - this.locDeleted);
+		if(this.maxChurn < (this.locAdded - this.locDeleted)) {
+			this.maxChurn = (this.locAdded - this.locDeleted);
+		}
+		
+	}
+	
+	public synchronized List<DiffEntry> commitTree(Git git,ObjectReader reader,RevCommit commit, RevCommit commitOld,DiffFormatter diff) throws IOException{
+		CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
+		oldTreeIter.reset( reader, commitOld.getTree() );
+		CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
+		newTreeIter.reset( reader, commit.getTree() );
+
+		
+		diff.setRepository( git.getRepository() );
+		diff.setContext( 0 );
+		return diff.scan( oldTreeIter, newTreeIter );
+		
+	}
+	
+	public synchronized void updateOtherMetrics(List<DiffEntry> entries,Repository repo,RevCommit commit,String className) throws IOException {
+		this.numCommit ++;
+		this.numRevision ++;
+		this.chgSetSize += entries.size();
+		if(this.maxChgSetSize < entries.size()) {
+			this.maxChgSetSize = entries.size();
+		}
+		if (this.numCommit.equals(1)) {
+			this.loc = countLinesOfFileInCommit(repo,commit,className);
+		}
+	}
+	
+	public synchronized List<Integer> calculateMetrics(Repository repo,Integer version,String className,List<String> dateVersion) {
+		
+		List<Integer> metrics = new ArrayList<>();
+		
 			try (Git git = new Git(repo)) {
-				//while ((commitId = rd.readLine()) != null) {  RevCommit> commit = walk.parseCommit(ObjectId.fromString(commitId)); walk.parseCommit(repo.resolve(commitId+"^"
 				
 					RevWalk walk = new RevWalk(repo);
-					List<RevCommit> commits = call(repo, className, dateVersion, version);
+					Date until = new SimpleDateFormat("yyyy-MM-dd").parse(dateVersion.get(version));
+					RevFilter before = CommitTimeRevFilter.before(until);
+					//List<RevCommit> commits = call(repo, className, dateVersion, version);
+					Iterable<RevCommit> commits = git.log().all().setRevFilter(before).addPath(className).call();
 					
 				for(RevCommit commit: commits) {	
 					if(commit.getParentCount() != 0) {
-						//System.out.println("commit trovata");
+						
 						RevCommit commitOld = commit.getParent(0);
 						try(ObjectReader reader = git.getRepository().newObjectReader()){
-							CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
-							oldTreeIter.reset( reader, commitOld.getTree() );
-							CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
-							newTreeIter.reset( reader, commit.getTree() );
-					
 							DiffFormatter diffFormatter = new DiffFormatter( DisabledOutputStream.INSTANCE );
-							diffFormatter.setRepository( git.getRepository() );
-							diffFormatter.setContext( 0 );
-							List<DiffEntry> entries = diffFormatter.scan( oldTreeIter, newTreeIter );
+							List<DiffEntry> entries = commitTree(git,reader,commit,commitOld,diffFormatter);
 					
 						// Print the contents of the DiffEntries
 							for( DiffEntry entry : entries ) {
 								if (entry.getNewPath().contains(className)) {
-									this.numRevision ++;
-									this.chgSetSize += entries.size();
-									if(this.maxChgSetSize < entries.size()) {
-										this.maxChgSetSize = entries.size();
-									}
-									FileHeader fileHeader = diffFormatter.toFileHeader( entry );
-									List<? extends HunkHeader> hunks = fileHeader.getHunks();
-									for( HunkHeader hunk : hunks ) {
-								//System.out.println( hunk.toEditList() );
-										EditList edits = hunk.toEditList();
-											for (Edit edit : edits) {
-												switch (edit.getType()) {
-													case INSERT:
-														this.locAdded += edit.getLengthB();
-														if(this.maxLocAdded < edit.getLengthB()) {
-															this.maxLocAdded = edit.getLengthB();
-														}
-														break;
-
-													case DELETE:
-														this.locDeleted += edit.getLengthA();
-														break;
-
-													case REPLACE:
-														int diff = edit.getLengthA() - edit.getLengthB();
-														if (diff > 0) {
-															this.locAdded += edit.getLengthA();
-															if(this.maxLocAdded < edit.getLengthA()) {
-																this.maxLocAdded = edit.getLengthA();
-															}
-															this.locDeleted += edit.getLengthB();
-														} else {
-															this.locDeleted += edit.getLengthA();
-															this.locAdded += edit.getLengthB();
-															if(this.maxLocAdded < edit.getLengthB()) {
-																this.maxLocAdded = edit.getLengthB();
-															}
-														}
-														break;
-
-													case EMPTY:
-														break;
-												}
-											}
-									}
-									this.churn = this.churn + (this.locAdded - this.locDeleted);
-									if(this.maxChurn < (this.locAdded - this.locDeleted)) {
-										this.maxChurn = (this.locAdded - this.locDeleted);
-									}
+									updateOtherMetrics(entries,repo,commit,className);
+									updateMetrics(entry,diffFormatter);
 								}
 							}
 						
@@ -145,13 +189,56 @@ public class MetricsNumber {
 					
 				walk.close();
 			}
-			System.out.println("revisioni:"+this.numRevision +"\n"+"locDeleted:"+ this.locDeleted+"\n"+"locAdded:"+ this.locAdded+"churn:"+this.churn);
-			System.out.println("maxChurn:"+this.maxChurn +"\n"+"maxLocAdded:"+ this.maxLocAdded+"\n"+"avgLocAdded:"+ getAvgLocAdded());
+			//System.out.println("revisioni:"+this.numRevision +"\n"+"locDeleted:"+ this.locDeleted+"\n"+"locAdded:"+ this.locAdded+"churn:"+this.churn);
+			//System.out.println("maxChurn:"+this.maxChurn +"\n"+"maxLocAdded:"+ this.maxLocAdded+"\n"+"avgLocAdded:"+ getAvgLocAdded());
+			//System.out.println("loc:"+this.loc +"\n"+"locTouched:"+ this.locTouched+"\n"+"chgSetSize:"+ this.chgSetSize);
+			//System.out.println("avgChgSetSize:"+getAvgChgSetSize() +"\n"+"maxChgSetSize:"+ this.maxChgSetSize);
+			metrics.add(this.loc);	
+			metrics.add(this.locTouched);
+			metrics.add(this.numRevision);
+			metrics.add(this.locAdded);
+			metrics.add(this.maxLocAdded);
+			metrics.add(getAvgLocAdded());
+			metrics.add(this.churn);
+			metrics.add(this.maxChurn);
+			metrics.add(getAvgChurn());
+			metrics.add(this.chgSetSize);
+			metrics.add(this.maxChgSetSize);
+			metrics.add(getAvgChgSetSize());
+			
 			} catch (RevisionSyntaxException | IOException | GitAPIException | ParseException e) {
 					
 				e.printStackTrace();
-			}		
+			}
+			return metrics; 
 	}
+	
+	private static int countLinesOfFileInCommit(Repository repository, RevCommit commit, String name) throws IOException {
+        try (RevWalk revWalk = new RevWalk(repository)) {
+            RevTree tree = commit.getTree();
+      
+            // now try to find a specific file
+            try (TreeWalk treeWalk = new TreeWalk(repository)) {
+                treeWalk.addTree(tree);
+                treeWalk.setRecursive(true);
+                treeWalk.setFilter(PathFilter.create(name));
+                if (!treeWalk.next()) {
+                    throw new IllegalStateException("Did not find expected file 'README.md'");
+                }
+
+                ObjectId objectId = treeWalk.getObjectId(0);
+                ObjectLoader loader = repository.open(objectId);
+
+                // load the content of the file into a stream
+                ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                loader.copyTo(stream);
+
+                revWalk.dispose();
+
+                return IOUtils.readLines(new ByteArrayInputStream(stream.toByteArray()), StandardCharsets.UTF_8).size();
+            }
+        }
+    }
 	
 	
 	public List<RevCommit> call(Repository rep,String className,List<String> dateVersion, Integer version) throws IOException, GitAPIException, ParseException {
@@ -164,7 +251,7 @@ public class MetricsNumber {
 	    RevCommit start = null;
 	    
 	    do {
-	        Iterable<RevCommit> log = git.log().setRevFilter(between).addPath(className).call();
+	        Iterable<RevCommit> log = git.log().all().setRevFilter(between).addPath(className).call();
 	        for (RevCommit commit : log) {
 	            if (commits.contains(commit)) {
 	                start = null;
@@ -194,7 +281,7 @@ public class MetricsNumber {
             List<DiffEntry> files = rd.compute();
             for (DiffEntry diffEntry : files) {
                 if ((diffEntry.getChangeType() == DiffEntry.ChangeType.RENAME || diffEntry.getChangeType() == DiffEntry.ChangeType.COPY) && diffEntry.getNewPath().contains(className)) {
-                    //System.out.println("Found: " + diffEntry.toString() + " return " + diffEntry.getOldPath());
+               
                     return diffEntry.getOldPath();
                 }
             }
@@ -241,8 +328,13 @@ public class MetricsNumber {
 			e1.printStackTrace();
 		} 
 		
+		
+		
 		MetricsNumber mn = new MetricsNumber();
-		mn.calculateMetrics("Bookkeeper",4,"bookkeeper-server/src/main/java/org/apache/bookkeeper/bookie/Bookie.java",lv);
+		Repository rep = mn.setup("Bookkeeper");
+		mn.calculateMetrics(rep,1,"bookkeeper-server/src/main/java/org/apache/bookkeeper/bookie/Bookie.java",lv);
+		
+		
 		
 		/* revisioni:14
 		locDeleted:188
