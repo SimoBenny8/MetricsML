@@ -1,54 +1,52 @@
 package secondmilestone;
 
-import java.util.Locale;
 
+import weka.classifiers.AbstractClassifier;
 import weka.classifiers.meta.FilteredClassifier;
-import weka.classifiers.trees.RandomForest;
+import weka.core.Instances;
 import weka.filters.supervised.instance.SpreadSubsample;
 import weka.filters.supervised.instance.Resample;
 import weka.filters.supervised.instance.SMOTE;
 
 public class Balancing {
 
-	public static void underSampling() throws Exception {
-		FilteredClassifier fc = null;
-		String[] opts = null;
+	public static FilteredClassifier underSampling(AbstractClassifier ac) throws Exception {
 		
-		RandomForest classifier = new RandomForest();
-		fc = new FilteredClassifier();
-		fc.setClassifier(classifier);
+		FilteredClassifier fc = new FilteredClassifier();
+		fc.setClassifier(ac);
 		SpreadSubsample  spreadSubsample = new SpreadSubsample();
-		opts = new String[]{ "-M", "1.0"};
+		String[] opts = new String[]{ "-M", "1.0"};
 		spreadSubsample.setOptions(opts);
 		fc.setFilter(spreadSubsample);
-		//abstractClassfier = fc;
+		return fc;
 	}
 	
 	
-	public static void smote() {
-		FilteredClassifier fc = null;
+	public static FilteredClassifier smote(AbstractClassifier ac,Instances trainingSet) throws Exception {
 		
-		RandomForest classifier = new RandomForest();
-		fc = new FilteredClassifier();
-		fc.setClassifier(classifier);
+		FilteredClassifier fc = new FilteredClassifier();
+		fc.setClassifier(ac);
 		SMOTE smote = new SMOTE();
-		//smote.setInputFormat(this.trainingSet);
+		smote.setInputFormat(trainingSet);
 		fc.setFilter(smote);
+		return fc;
 	}
 	
-	public static void overSampling() { //TODO
-		FilteredClassifier fc = null;
+	public static FilteredClassifier overSampling(AbstractClassifier ac,Instances trainingSet) throws Exception { //Verificare
 		
-		RandomForest classifier = new RandomForest();
+		FilteredClassifier fc = new FilteredClassifier();
+		fc.setClassifier(ac);
 		// Check what is the majority class
-		//Integer trainingSize = this.trainingSet.size();
+		//Integer trainingSize = trainingSet.size();
 		//Double sampleSizePercent =  ((this.numDefectiveInTraining > ((double) trainingSize / 2.0)) ? (double) this.numDefectiveInTraining/trainingSize : (1 - ((double) this.numDefectiveInTraining/trainingSize)));
 		//sampleSizePercent = sampleSizePercent * 100 * 2;
 		Resample resample = new Resample();
-		//resample.setInputFormat(this.trainingSet);
+		resample.setInputFormat(trainingSet);
 		//opts = new String[]{ "-B", "1.0", "-Z", String.format(Locale.US, "%.2f", sampleSizePercent)};
 		//resample.setOptions(opts);
 		fc.setFilter(resample);
+		
+		return fc;
 		
 	}
 	

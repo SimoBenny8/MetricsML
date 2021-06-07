@@ -7,5 +7,13 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry kind="lib" path="C:/Users/Simone Benedetti/Downloads/json-20210307.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Simone Benedetti/Downloads/org.eclipse.jgit-5.11.0.202103091610-r.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Simone Benedetti/Downloads/slf4j-log4j12-1.7.2.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Simone Benedetti/Downloads/slf4j-api-1.7.2.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Simone Benedetti/Downloads/log4j-1.2.15.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Simone Benedetti/Downloads/guava-23.0.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Simone Benedetti/Downloads/commons-io-2.4.jar"/>
+	<classpathentry kind="lib" path="C:/Program Files/Weka-3-8-5/weka.jar"/>
+	<classpathentry kind="lib" path="C:/Users/Simone Benedetti/Downloads/SMOTE1.0.3/SMOTE.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
