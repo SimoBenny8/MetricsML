@@ -5,23 +5,25 @@ import java.util.List;
 
 import weka.attributeSelection.CfsSubsetEval;
 import weka.attributeSelection.GreedyStepwise;
-import weka.classifiers.AbstractClassifier;
-import weka.classifiers.evaluation.Evaluation;
-import weka.classifiers.trees.RandomForest;
 import weka.core.Instances;
-import weka.core.converters.ConverterUtils.DataSource;
 import weka.filters.Filter;
 import weka.filters.supervised.attribute.AttributeSelection;
 
 public class FeatureSelection {
 	
-	public static List<Float> applyFeatureSelection(Instances trainingSet,Instances testingSet,AbstractClassifier ac,Integer classIndex) throws Exception{
+	private FeatureSelection() {
+	    throw new IllegalStateException("Utility class");
+	  }
+
+
+	
+	public static List<Instances> applyFeatureSelection(Instances trainingSet,Instances testingSet) throws Exception{
 		AttributeSelection filter = new AttributeSelection();
 		//create evaluator and search algorithm objects
 		CfsSubsetEval cfsEval = new CfsSubsetEval();
 		GreedyStepwise search = new GreedyStepwise();
 		
-		List<Float> result = new ArrayList<>();
+		List<Instances> result = new ArrayList<>();
 		
 		//set the algorithm to search backward
 		search.setSearchBackwards(true);
@@ -33,7 +35,12 @@ public class FeatureSelection {
 		Instances trainingSetFiltered = Filter.useFilter(trainingSet, filter);
 		Instances testingSetFiltered = Filter.useFilter(testingSet, filter);
 		
-		Integer numAttrNoFilter = trainingSet.numAttributes();
+		result.add(trainingSetFiltered);
+		result.add(testingSetFiltered);
+		
+		return result;
+		
+		/*Integer numAttrNoFilter = trainingSet.numAttributes();
 		trainingSet.setClassIndex(numAttrNoFilter - 1);
 		testingSet.setClassIndex(numAttrNoFilter - 1);
 		
@@ -60,13 +67,7 @@ public class FeatureSelection {
 	    result.add((float)eval.areaUnderROC(classIndex));
 	    result.add((float)eval.kappa());
 	    
-	    return result;
+	    return result;*/
 		
 	}
-
-	public static void main(String[] args) throws Exception {
-		
-		
-	}
-
 }

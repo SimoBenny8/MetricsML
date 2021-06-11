@@ -3,13 +3,12 @@ package secondmilestone;
 public class MetricsWeka {
 	
 	private String projectName;
-	private Classifier classifier;
 	private String sampling;
 	private Float percentualTraining;
 	private Boolean featureSelection;
 	private Integer numTrainingVersions;
-	private Integer numDefectiveInTraining;
-	private Integer numDefectiveInTesting;
+	private Float percDefectiveInTraining;
+	private Float percDefectiveInTesting;
 	private Integer datasetSize;
 	
 	public Float getPercentualTraining() {
@@ -37,14 +36,6 @@ public class MetricsWeka {
 		this.projectName = projectName;
 	}
 
-	public Classifier getClassifier() {
-		return classifier;
-	}
-
-	public void setClassifier(Classifier classifier) {
-		this.classifier = classifier;
-	}
-
 	public String getSampling() {
 		return sampling;
 	}
@@ -62,20 +53,20 @@ public class MetricsWeka {
 	}
 
 
-	public Integer getNumDefectiveInTraining() {
-		return numDefectiveInTraining;
+	public Float getPercDefectiveInTraining() {
+		return percDefectiveInTraining;
 	}
 
-	public void setNumDefectiveInTraining(Integer numDefectiveInTraining) {
-		this.numDefectiveInTraining = numDefectiveInTraining;
+	public void setPercDefectiveInTraining(Integer percDefectiveInTraining) {
+		this.percDefectiveInTraining = ((float)percDefectiveInTraining/(float)getDatasetSize()*100);
 	}
 
-	public Integer getNumDefectiveInTesting() {
-		return numDefectiveInTesting;
+	public Float getPercDefectiveInTesting() {
+		return percDefectiveInTesting;
 	}
 
-	public void setNumDefectiveInTesting(Integer numDefectiveInTesting) {
-		this.numDefectiveInTesting = numDefectiveInTesting;
+	public void setPercDefectiveInTesting(Integer percDefectiveInTesting) {
+		this.percDefectiveInTesting = ((float)percDefectiveInTesting/(float)getDatasetSize()*100);
 	}
 
 	public Integer getDatasetSize() {
@@ -87,9 +78,5 @@ public class MetricsWeka {
 	}
 
 
-	public static void main(String[] args) {
-		
-
-	}
-
+	
 }

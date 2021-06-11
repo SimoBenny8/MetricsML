@@ -1,6 +1,5 @@
 package secondmilestone;
 
-
 import weka.classifiers.AbstractClassifier;
 import weka.classifiers.meta.FilteredClassifier;
 import weka.core.Instances;
@@ -22,28 +21,30 @@ public class Balancing {
 	}
 	
 	
-	public static FilteredClassifier smote(AbstractClassifier ac,Instances trainingSet) throws Exception {
+	public static FilteredClassifier smote(AbstractClassifier ac,Instances trainingSet,Integer numDefectiveInTraining) throws Exception {
 		
+		String[] opts;
 		FilteredClassifier fc = new FilteredClassifier();
 		fc.setClassifier(ac);
 		SMOTE smote = new SMOTE();
 		smote.setInputFormat(trainingSet);
+		Float numPercentual = (float) Math.round((float) ((trainingSet.numInstances() - 2*numDefectiveInTraining)*100)/(float) numDefectiveInTraining);
+		opts = new String[] {"-P", numPercentual.toString()};
+		smote.setOptions(opts);
 		fc.setFilter(smote);
 		return fc;
 	}
 	
-	public static FilteredClassifier overSampling(AbstractClassifier ac,Instances trainingSet) throws Exception { //Verificare
+	public static FilteredClassifier overSampling(AbstractClassifier ac,Instances trainingSet) throws Exception { 
 		
+		String[] opts;
 		FilteredClassifier fc = new FilteredClassifier();
 		fc.setClassifier(ac);
-		// Check what is the majority class
-		//Integer trainingSize = trainingSet.size();
-		//Double sampleSizePercent =  ((this.numDefectiveInTraining > ((double) trainingSize / 2.0)) ? (double) this.numDefectiveInTraining/trainingSize : (1 - ((double) this.numDefectiveInTraining/trainingSize)));
-		//sampleSizePercent = sampleSizePercent * 100 * 2;
 		Resample resample = new Resample();
 		resample.setInputFormat(trainingSet);
-		//opts = new String[]{ "-B", "1.0", "-Z", String.format(Locale.US, "%.2f", sampleSizePercent)};
-		//resample.setOptions(opts);
+		
+		opts = new String[]{ "-B", "1.0","-S","1", "-Z", "100.0"};
+		resample.setOptions(opts);
 		fc.setFilter(resample);
 		
 		return fc;
@@ -51,7 +52,8 @@ public class Balancing {
 	}
 	
 	public static void main(String[] args) {
-		
+		Float r = (float) 1000.0;
+		System.out.println(r.toString());
 	}
 
 }
