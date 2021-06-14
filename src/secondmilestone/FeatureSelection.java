@@ -40,34 +40,6 @@ public class FeatureSelection {
 		
 		return result;
 		
-		/*Integer numAttrNoFilter = trainingSet.numAttributes();
-		trainingSet.setClassIndex(numAttrNoFilter - 1);
-		testingSet.setClassIndex(numAttrNoFilter - 1);
-		
-		Integer numAttrFiltered = trainingSetFiltered.numAttributes();
-		
-		Evaluation eval = new Evaluation(testingSet);
-		//evaluation with filtered
-		trainingSetFiltered.setClassIndex(numAttrFiltered - 1);
-		testingSetFiltered.setClassIndex(numAttrFiltered - 1);
-		ac.buildClassifier(trainingSetFiltered);
-	    eval.evaluateModel(ac, testingSetFiltered);
-	    
-	    Float truePositives = (float) eval.numTruePositives(classIndex);
-		Float falsePositives = (float) eval.numFalsePositives(classIndex);
-		Float trueNegatives = (float) eval.numTrueNegatives(classIndex);
-		Float falseNegatives = (float) eval.numFalseNegatives(classIndex);
-	    
-	    result.add(truePositives);
-	    result.add(falsePositives);
-	    result.add(trueNegatives);
-	    result.add(falseNegatives);
-	    result.add((float)eval.precision(classIndex));
-	    result.add((float)eval.recall(classIndex));
-	    result.add((float)eval.areaUnderROC(classIndex));
-	    result.add((float)eval.kappa());
-	    
-	    return result;*/
 		
 	}
 }

@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import weka.classifiers.AbstractClassifier;
 import weka.classifiers.bayes.NaiveBayes;
 import weka.classifiers.evaluation.Evaluation;
 import weka.classifiers.lazy.IBk;
@@ -35,16 +36,19 @@ enum Sampling{
 
 enum CostSensitiveEnum{
 	NOCOST,
-	THRESHOLD,
-	LEARNING
+	CSTHRESHOLD,
+	CSLEARNING
 }
 
 
 public class WalkForward {
 	
 	private static String[] columns = {"Dataset", "#TrainingRelease", "%Training", "%Defective in training", "%Defective in testing", "Classifier", "Balancing", "FeatureSelection", "Sensitivity", "TP", "FP", "TN", "FN", "Precision", "Recall", "AUC", "Kappa"};
-	private static String[] projects = {"Bookkeeper","Storm"};
+	private static String[] projects = {"Storm"};
 	private static Integer datasetSize;
+	private static AbstractClassifier[] classifier = {new NaiveBayes(),new RandomForest(),new IBk()};
+	private static Integer numDefectiveInTraining;
+	private static Integer numDefectiveInTesting;
 	
 	public static List<Instances> applyWalkForward(File projArff,Integer version,  Double maxVersion) throws IOException {
 		
@@ -55,18 +59,26 @@ public class WalkForward {
 		Instances data = loader.getDataSet();//get instances object
 		datasetSize = data.size();
 		
+		Integer classIndex = assignBuggyValue(data);
 		Instances training = new Instances(data, 0);
 		Instances testing = new Instances(data, 0);
 		
+		numDefectiveInTraining = 0;
+		numDefectiveInTesting = 0;
 	
 		for(Instance instance: data) {
 			if((double) version < maxVersion) {
 				if (instance.value(0) <= version) {
 					training.add(instance);
+					if (instance.value(instance.numAttributes() - 1) == classIndex) {
+						numDefectiveInTraining++;
+					}
 				
 				} else if (instance.value(0) == (version + 1)) {
 					testing.add(instance);
-				
+					if (instance.value(instance.numAttributes() - 1) == classIndex) {
+						numDefectiveInTesting++;
+					}
 				} 
 			}
 		}
@@ -87,15 +99,224 @@ public class WalkForward {
 		
 	}
 	
+	public static synchronized void valutationToCsv(Instances training, Instances testing,Integer classIndex,Integer i,BufferedWriter rw, String featureSel) throws Exception {
+		
+		for(Sampling samp: Sampling.values()) {
+			
+			for(int j = 0; j <classifier.length; j++) {
+				Evaluation evalThreshold;
+				Evaluation evalLearning;
+				Evaluation evalNoCost;
+	
+				Float truePositivesth;
+				Float falsePositivesth;
+				Float trueNegativesth;
+				Float falseNegativesth;
+				
+				Float truePositives;
+				Float falsePositives;
+				Float trueNegatives;
+				Float falseNegatives;
+				
+				Float truePositivesln;
+				Float falsePositivesln;
+				Float trueNegativesln;
+				Float falseNegativesln;
+				
+				FilteredClassifier fcnb = null;
+				FilteredClassifier fcos = null;
+				FilteredClassifier fcsmote = null;
+				
+				MetricsWeka mw = new MetricsWeka();
+				mw.setDatasetSize(datasetSize);
+				mw.setPercentualTraining((float) training.numInstances());
+				mw.setNumTrainingVersions(i);
+				mw.setPercDefectiveInTraining(numDefectiveInTraining);
+				mw.setPercDefectiveInTesting(numDefectiveInTesting);
+				
+				int numAttributes = training.numAttributes();
+				training.setClassIndex(numAttributes - 1);
+				testing.setClassIndex(numAttributes - 1);
+				
+				switch(samp) {
+					
+					case NOSAMPLING:
+						
+						classifier[j].buildClassifier(training);
+						
+						evalThreshold = CostSensitive.applyCostSensitive(classifier[j],training,testing,true);
+						evalLearning = CostSensitive.applyCostSensitive(classifier[j],training,testing,false);	
+						evalNoCost = new Evaluation(training);	
+						
+						evalThreshold.evaluateModel(classifier[j], testing); 
+						evalLearning.evaluateModel(classifier[j], testing); 
+						evalNoCost.evaluateModel(classifier[j], testing); 
+						
+						truePositivesth = (float) evalThreshold.numTruePositives(classIndex);
+						falsePositivesth = (float) evalThreshold.numFalsePositives(classIndex);
+						trueNegativesth = (float) evalThreshold.numTrueNegatives(classIndex);
+						falseNegativesth = (float) evalThreshold.numFalseNegatives(classIndex);
+						
+						truePositives = (float) evalNoCost.numTruePositives(classIndex);
+						falsePositives = (float) evalNoCost.numFalsePositives(classIndex);
+						trueNegatives = (float) evalNoCost.numTrueNegatives(classIndex);
+						falseNegatives = (float) evalNoCost.numFalseNegatives(classIndex);
+						
+						truePositivesln = (float) evalLearning.numTruePositives(classIndex);
+						falsePositivesln = (float) evalLearning.numFalsePositives(classIndex);
+						trueNegativesln = (float) evalLearning.numTrueNegatives(classIndex);
+						falseNegativesln = (float) evalLearning.numFalseNegatives(classIndex);
+						
+						
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"No_Balancing"+","+featureSel+","+"No_Cost"+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
+						rw.flush();
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"No_Balancing"+","+featureSel+","+"Threshold"+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
+						rw.flush();
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"No_Balancing"+","+featureSel+","+"Learning"+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
+						rw.flush();
+						break;
+					case UNDERSAMPLING:
+						 fcnb = Balancing.underSampling( classifier[j]);
+						
+						fcnb.buildClassifier(training);
+						
+						evalThreshold = CostSensitive.applyCostSensitive(fcnb,training,testing,true);
+						evalLearning = CostSensitive.applyCostSensitive(fcnb,training,testing,false);	
+						evalNoCost = new Evaluation(training);	
+						
+						evalThreshold.evaluateModel(fcnb, testing); 
+						evalLearning.evaluateModel(fcnb, testing); 
+						evalNoCost.evaluateModel(fcnb, testing); 
+						
+						truePositivesth = (float) evalThreshold.numTruePositives(classIndex);
+						falsePositivesth = (float) evalThreshold.numFalsePositives(classIndex);
+						trueNegativesth = (float) evalThreshold.numTrueNegatives(classIndex);
+						falseNegativesth = (float) evalThreshold.numFalseNegatives(classIndex);
+						
+						truePositives = (float) evalNoCost.numTruePositives(classIndex);
+						falsePositives = (float) evalNoCost.numFalsePositives(classIndex);
+						trueNegatives = (float) evalNoCost.numTrueNegatives(classIndex);
+						falseNegatives = (float) evalNoCost.numFalseNegatives(classIndex);
+						
+						truePositivesln = (float) evalLearning.numTruePositives(classIndex);
+						falsePositivesln = (float) evalLearning.numFalsePositives(classIndex);
+						trueNegativesln = (float) evalLearning.numTrueNegatives(classIndex);
+						falseNegativesln = (float) evalLearning.numFalseNegatives(classIndex);
+						
+					
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Undersampling"+","+featureSel+","+"No_Cost"+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
+						rw.flush();
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Undersampling"+","+featureSel+","+"Threshold"+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
+						rw.flush();
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Undersampling"+","+featureSel+","+"Learning"+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
+						rw.flush();
+						break;
+						
+					case OVERSAMPLING:
+						fcos = Balancing.overSampling( classifier[j],training);
+						
+						fcos.buildClassifier(training);
+						
+						evalThreshold = CostSensitive.applyCostSensitive(fcos,training,testing,true);
+						evalLearning = CostSensitive.applyCostSensitive(fcos,training,testing,false);	
+						evalNoCost = new Evaluation(training);	
+						
+						evalThreshold.evaluateModel(fcos, testing); 
+						evalLearning.evaluateModel(fcos, testing); 
+						evalNoCost.evaluateModel(fcos, testing); 
+						
+						truePositivesth = (float) evalThreshold.numTruePositives(classIndex);
+						falsePositivesth = (float) evalThreshold.numFalsePositives(classIndex);
+						trueNegativesth = (float) evalThreshold.numTrueNegatives(classIndex);
+						falseNegativesth = (float) evalThreshold.numFalseNegatives(classIndex);
+						
+						truePositives = (float) evalNoCost.numTruePositives(classIndex);
+						falsePositives = (float) evalNoCost.numFalsePositives(classIndex);
+						trueNegatives = (float) evalNoCost.numTrueNegatives(classIndex);
+						falseNegatives = (float) evalNoCost.numFalseNegatives(classIndex);
+						
+						truePositivesln = (float) evalLearning.numTruePositives(classIndex);
+						falsePositivesln = (float) evalLearning.numFalsePositives(classIndex);
+						trueNegativesln = (float) evalLearning.numTrueNegatives(classIndex);
+						falseNegativesln = (float) evalLearning.numFalseNegatives(classIndex);
+						
+						
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Oversampling"+","+featureSel+","+"No_Cost"+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
+						rw.flush();
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Oversampling"+","+featureSel+","+"Threshold"+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
+						rw.flush();
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Oversampling"+","+featureSel+","+"Learning"+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
+						rw.flush();
+						break;
+						
+					case SMOTE:
+						
+						fcsmote = Balancing.smote( classifier[j],training,numDefectiveInTraining);
+						
+						fcsmote.buildClassifier(training);
+						
+						evalThreshold = CostSensitive.applyCostSensitive(fcsmote,training,testing,true);
+						evalLearning = CostSensitive.applyCostSensitive(fcsmote,training,testing,false);	
+						evalNoCost = new Evaluation(training);	
+						
+						evalThreshold.evaluateModel(fcsmote, testing); 
+						evalLearning.evaluateModel(fcsmote, testing); 
+						evalNoCost.evaluateModel(fcsmote, testing); 
+						
+						truePositivesth = (float) evalThreshold.numTruePositives(classIndex);
+						falsePositivesth = (float) evalThreshold.numFalsePositives(classIndex);
+						trueNegativesth = (float) evalThreshold.numTrueNegatives(classIndex);
+						falseNegativesth = (float) evalThreshold.numFalseNegatives(classIndex);
+						
+						truePositives = (float) evalNoCost.numTruePositives(classIndex);
+						falsePositives = (float) evalNoCost.numFalsePositives(classIndex);
+						trueNegatives = (float) evalNoCost.numTrueNegatives(classIndex);
+						falseNegatives = (float) evalNoCost.numFalseNegatives(classIndex);
+						
+						truePositivesln = (float) evalLearning.numTruePositives(classIndex);
+						falsePositivesln = (float) evalLearning.numFalsePositives(classIndex);
+						trueNegativesln = (float) evalLearning.numTrueNegatives(classIndex);
+						falseNegativesln = (float) evalLearning.numFalseNegatives(classIndex);
+						
+						
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Smote"+","+featureSel+","+"No_Cost"+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
+						rw.flush();
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Smote"+","+featureSel+","+"Threshold"+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
+						rw.flush();
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Smote"+","+featureSel+","+"Learning"+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
+						rw.flush();
+						
+						break;
+					
+				}
+			}	
+		}
+		
+		
+	}
+	
+	public static String getNameClassifier(AbstractClassifier ac,Integer j) {
+		String name = ac.toString();
+		String[] nameC = name.split(" ");
+		
+		if(j.equals(1)) {
+			String[] nameRF = nameC[0].split("\n");
+			return nameRF[0];
+		}else if(j.equals(0))
+			return nameC[0]+nameC[1];
+		else
+			return nameC[0];
+	}
+	
 	
 	public static void main(String[] args) throws Exception {
 		
-		File file = new File("BOOKKEEPER_Dataset.arff");
+		File file = new File(projects[0].toUpperCase()+"_Dataset.arff");
 		List<Instances> wf = new ArrayList<>();
 		ArffLoader loader = new ArffLoader();
 		loader.setSource(file);
 		Instances data = loader.getDataSet();//get instances object
-	try(BufferedWriter rw = new BufferedWriter(new FileWriter(projects[0]+"_Results_Weka"+".csv", true))){
+	try(BufferedWriter rw = new BufferedWriter(new FileWriter(projects[0].toUpperCase()+"_Results_Weka"+".csv", true))){
 			
 			for(Integer j = 0; j<columns.length - 1; j++) {
 				rw.append(columns[j] + ",");
@@ -117,1028 +338,15 @@ public class WalkForward {
 				e.printStackTrace();
 			}
 			
+			Integer classIndex = assignBuggyValue(wf.get(0));
+			List<Instances> fs = FeatureSelection.applyFeatureSelection(wf.get(0),wf.get(1));
 			
-			Integer numDefectiveInTraining = 0;
-			Integer numDefectiveInTesting = 0;
+			valutationToCsv(wf.get(0), wf.get(1),classIndex,i, rw, "No_FS");
+			valutationToCsv(fs.get(0), fs.get(1),classIndex,i, rw, "FS");
+		
 			
-			
-			for(FeatureSelectionEnum feature: FeatureSelectionEnum.values()) {
-				if(feature.equals(FeatureSelectionEnum.FEATURE)) {
-					List<Instances> fs = FeatureSelection.applyFeatureSelection(wf.get(0),wf.get(1));
-					Integer classIndex = assignBuggyValue(fs.get(0));
-					for(Instance instance: fs.get(0)) {
-						if (instance.value(instance.numAttributes() - 1) == classIndex) {
-							numDefectiveInTraining++;
-						}
-					}
-					
-					for(Instance instance: fs.get(1)) {
-						if (instance.value(instance.numAttributes() - 1) == classIndex) {
-							numDefectiveInTesting++;
-						}
-					}
-						for(Sampling samp: Sampling.values()) {
-							Evaluation evalnb;
-							Evaluation evalrf;
-							Evaluation evalibk;
-							
-							Float truePositivesnb;
-							Float falsePositivesnb;
-							Float trueNegativesnb;
-							Float falseNegativesnb;
-							
-							Float truePositivesrf;
-							Float falsePositivesrf;
-							Float trueNegativesrf;
-							Float falseNegativesrf;
-							
-							Float truePositivesibk;
-							Float falsePositivesibk;
-							Float trueNegativesibk;
-							Float falseNegativesibk;
-							switch(samp) {
-								case NOSAMPLING:
-									for(CostSensitiveEnum cse :  CostSensitiveEnum.values()) {
-										switch(cse) {
-											case NOCOST:
-												MetricsWeka mw = new MetricsWeka();
-												mw.setDatasetSize(datasetSize);
-												mw.setPercentualTraining((float) fs.get(0).numInstances());
-												mw.setNumTrainingVersions(i);
-												mw.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												int numAttributes = fs.get(0).numAttributes();
-												fs.get(0).setClassIndex(numAttributes - 1);
-												fs.get(1).setClassIndex(numAttributes - 1);
-												
-												
-												NaiveBayes nbClassifier = new NaiveBayes();
-												RandomForest rfClassifier = new RandomForest();
-												IBk ibkClassifier = new IBk();
-
-												nbClassifier.buildClassifier(fs.get(0));
-												rfClassifier.buildClassifier(fs.get(0));
-												ibkClassifier.buildClassifier(fs.get(0));
-												
-												evalnb = new Evaluation(fs.get(1));
-												evalrf = new Evaluation(fs.get(1));	
-												evalibk = new Evaluation(fs.get(1));	
-												
-												evalnb.evaluateModel(nbClassifier, fs.get(1)); 
-												evalrf.evaluateModel(rfClassifier, fs.get(1)); 
-												evalibk.evaluateModel(ibkClassifier, fs.get(1));
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-												
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"No_Balancing"+","+"FS"+","+"No_Cost"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"No_Balancing"+","+"FS"+","+"No_Cost"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"IBk"+","+"No_Balancing"+","+"FS"+","+"No_Cost"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-											case THRESHOLD:
-												MetricsWeka mw2 = new MetricsWeka();
-												mw2.setDatasetSize(datasetSize);
-												mw2.setPercentualTraining((float) fs.get(0).numInstances());
-												mw2.setNumTrainingVersions(i);
-												mw2.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw2.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												evalnb = CostSensitive.applyCostSensitive(new NaiveBayes(),fs.get(0),fs.get(1),true);
-												evalrf = CostSensitive.applyCostSensitive(new RandomForest(),fs.get(0),fs.get(1),true);	
-												evalibk = CostSensitive.applyCostSensitive(new IBk(),fs.get(0),fs.get(1),true);	
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"No_Balancing"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"No_Balancing"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"IBk"+","+"No_Balancing"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-											case LEARNING:
-												MetricsWeka mw3 = new MetricsWeka();
-												mw3.setDatasetSize(datasetSize);
-												mw3.setPercentualTraining((float) fs.get(0).numInstances());
-												mw3.setNumTrainingVersions(i);
-												mw3.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw3.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												evalnb = CostSensitive.applyCostSensitive(new NaiveBayes(),fs.get(0),fs.get(1),false);
-												evalrf = CostSensitive.applyCostSensitive(new RandomForest(),fs.get(0),fs.get(1),false);	
-												evalibk = CostSensitive.applyCostSensitive(new IBk(),fs.get(0),fs.get(1),false);	
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"No_Balancing"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"No_Balancing"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"IBk"+","+"No_Balancing"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-										}
-									}
-									
-									break;
-								case UNDERSAMPLING:
-									
-									FilteredClassifier fcnb = Balancing.underSampling( new NaiveBayes());
-									FilteredClassifier fcrf = Balancing.underSampling( new RandomForest());
-									FilteredClassifier fcibk = Balancing.underSampling( new IBk());
-									
-									for(CostSensitiveEnum cse :  CostSensitiveEnum.values()) {
-										switch(cse) {
-											case NOCOST:
-												MetricsWeka mw = new MetricsWeka();
-												mw.setDatasetSize(datasetSize);
-												mw.setPercentualTraining((float) fs.get(0).numInstances());
-												mw.setNumTrainingVersions(i);
-												mw.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												int numAttributes = fs.get(0).numAttributes();
-												fs.get(0).setClassIndex(numAttributes - 1);
-												fs.get(1).setClassIndex(numAttributes - 1);
-												
-												fcnb.buildClassifier(fs.get(0));
-												fcrf.buildClassifier(fs.get(0));
-												fcibk.buildClassifier(fs.get(0));
-												
-												evalnb = new Evaluation(fs.get(1));
-												evalrf = new Evaluation(fs.get(1));	
-												evalibk = new Evaluation(fs.get(1));	
-												
-												evalnb.evaluateModel(fcnb, fs.get(1)); 
-												evalrf.evaluateModel(fcrf, fs.get(1)); 
-												evalibk.evaluateModel(fcibk, fs.get(1));
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-												
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"UnderSampling"+","+"FS"+","+"No_Cost"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"UnderSampling"+","+"FS"+","+"No_Cost"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"IBk"+","+"UnderSampling"+","+"FS"+","+"No_Cost"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-												
-											case THRESHOLD:
-												MetricsWeka mw2 = new MetricsWeka();
-												mw2.setDatasetSize(datasetSize);
-												mw2.setPercentualTraining((float) fs.get(0).numInstances());
-												mw2.setNumTrainingVersions(i);
-												mw2.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw2.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												evalnb = CostSensitive.applyCostSensitive(fcnb,fs.get(0),fs.get(1),true);
-												evalrf = CostSensitive.applyCostSensitive(fcrf,fs.get(0),fs.get(1),true);	
-												evalibk = CostSensitive.applyCostSensitive(fcibk,fs.get(0),fs.get(1),true);	
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"UnderSampling"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"UnderSampling"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"IBk"+","+"UnderSampling"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-
-											case LEARNING:
-												MetricsWeka mw3 = new MetricsWeka();
-												mw3.setDatasetSize(datasetSize);
-												mw3.setPercentualTraining((float) fs.get(0).numInstances());
-												mw3.setNumTrainingVersions(i);
-												mw3.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw3.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												evalnb = CostSensitive.applyCostSensitive(fcnb,fs.get(0),fs.get(1),false);
-												evalrf = CostSensitive.applyCostSensitive(fcrf,fs.get(0),fs.get(1),false);	
-												evalibk = CostSensitive.applyCostSensitive(fcibk,fs.get(0),fs.get(1),false);	
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"UnderSampling"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"UnderSampling"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"IBk"+","+"UnderSampling"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-										}
-									}
-									break;
-								case OVERSAMPLING:
-									FilteredClassifier fcnb2 = Balancing.overSampling( new NaiveBayes(),fs.get(0));
-									FilteredClassifier fcrf2 = Balancing.overSampling( new RandomForest(),fs.get(0));
-									FilteredClassifier fcibk2 = Balancing.overSampling( new IBk(),fs.get(0));
-									for(CostSensitiveEnum cse :  CostSensitiveEnum.values()) {
-										switch(cse) {
-										case NOCOST:
-											MetricsWeka mw = new MetricsWeka();
-											mw.setDatasetSize(datasetSize);
-											mw.setPercentualTraining((float) fs.get(0).numInstances());
-											mw.setNumTrainingVersions(i);
-											mw.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											int numAttributes = fs.get(0).numAttributes();
-											fs.get(0).setClassIndex(numAttributes - 1);
-											fs.get(1).setClassIndex(numAttributes - 1);
-											
-											fcnb2.buildClassifier(fs.get(0));
-											fcrf2.buildClassifier(fs.get(0));
-											fcibk2.buildClassifier(fs.get(0));
-											
-											evalnb = new Evaluation(fs.get(1));
-											evalrf = new Evaluation(fs.get(1));	
-											evalibk = new Evaluation(fs.get(1));	
-											
-											evalnb.evaluateModel(fcnb2, fs.get(1)); 
-											evalrf.evaluateModel(fcrf2, fs.get(1)); 
-											evalibk.evaluateModel(fcibk2, fs.get(1));
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"OverSampling"+","+"FS"+","+"No_Cost"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"OverSampling"+","+"FS"+","+"No_Cost"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"IBk"+","+"OverSampling"+","+"FS"+","+"No_Cost"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-											
-										case THRESHOLD:
-											MetricsWeka mw2 = new MetricsWeka();
-											mw2.setDatasetSize(datasetSize);
-											mw2.setPercentualTraining((float) fs.get(0).numInstances());
-											mw2.setNumTrainingVersions(i);
-											mw2.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw2.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											evalnb = CostSensitive.applyCostSensitive(fcnb2,fs.get(0),fs.get(1),true);
-											evalrf = CostSensitive.applyCostSensitive(fcrf2,fs.get(0),fs.get(1),true);	
-											evalibk = CostSensitive.applyCostSensitive(fcibk2,fs.get(0),fs.get(1),true);	
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-										
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"OverSampling"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"OverSampling"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"IBk"+","+"OverSampling"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-
-										case LEARNING:
-											MetricsWeka mw3 = new MetricsWeka();
-											mw3.setDatasetSize(datasetSize);
-											mw3.setPercentualTraining((float) fs.get(0).numInstances());
-											mw3.setNumTrainingVersions(i);
-											mw3.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw3.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											evalnb = CostSensitive.applyCostSensitive(fcnb2,fs.get(0),fs.get(1),false);
-											evalrf = CostSensitive.applyCostSensitive(fcrf2,fs.get(0),fs.get(1),false);	
-											evalibk = CostSensitive.applyCostSensitive(fcibk2,fs.get(0),fs.get(1),false);	
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-										
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"OverSampling"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"OverSampling"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"IBk"+","+"OverSampling"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-									}
-									}
-									break;
-								case SMOTE:
-									FilteredClassifier fcnb3 = Balancing.smote( new NaiveBayes(),fs.get(0),numDefectiveInTraining);
-									FilteredClassifier fcrf3 = Balancing.smote( new RandomForest(),fs.get(0),numDefectiveInTraining);
-									FilteredClassifier fcibk3 = Balancing.smote( new IBk(),fs.get(0),numDefectiveInTraining);
-									for(CostSensitiveEnum cse :  CostSensitiveEnum.values()) {
-										switch(cse) {
-										case NOCOST:
-											MetricsWeka mw = new MetricsWeka();
-											mw.setDatasetSize(datasetSize);
-											mw.setPercentualTraining((float) fs.get(0).numInstances());
-											mw.setNumTrainingVersions(i);
-											mw.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											int numAttributes = fs.get(0).numAttributes();
-											fs.get(0).setClassIndex(numAttributes - 1);
-											fs.get(1).setClassIndex(numAttributes - 1);
-											
-											fcnb3.buildClassifier(fs.get(0));
-											fcrf3.buildClassifier(fs.get(0));
-											fcibk3.buildClassifier(fs.get(0));
-											
-											evalnb = new Evaluation(fs.get(1));
-											evalrf = new Evaluation(fs.get(1));	
-											evalibk = new Evaluation(fs.get(1));	
-											
-											evalnb.evaluateModel(fcnb3, fs.get(1)); 
-											evalrf.evaluateModel(fcrf3, fs.get(1)); 
-											evalibk.evaluateModel(fcibk3, fs.get(1));
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"Smote"+","+"FS"+","+"No_Cost"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"Smote"+","+"FS"+","+"No_Cost"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"IBk"+","+"Smote"+","+"FS"+","+"No_Cost"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-											
-										case THRESHOLD:
-											MetricsWeka mw2 = new MetricsWeka();
-											mw2.setDatasetSize(datasetSize);
-											mw2.setPercentualTraining((float) fs.get(0).numInstances());
-											mw2.setNumTrainingVersions(i);
-											mw2.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw2.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											evalnb = CostSensitive.applyCostSensitive(fcnb3,fs.get(0),fs.get(1),true);
-											evalrf = CostSensitive.applyCostSensitive(fcrf3,fs.get(0),fs.get(1),true);	
-											evalibk = CostSensitive.applyCostSensitive(fcibk3,fs.get(0),fs.get(1),true);	
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-										
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"Smote"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"Smote"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"IBk"+","+"Smote"+","+"FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-
-										case LEARNING:
-											MetricsWeka mw3 = new MetricsWeka();
-											mw3.setDatasetSize(datasetSize);
-											mw3.setPercentualTraining((float) fs.get(0).numInstances());
-											mw3.setNumTrainingVersions(i);
-											mw3.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw3.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											evalnb = CostSensitive.applyCostSensitive(fcnb3,fs.get(0),fs.get(1),false);
-											evalrf = CostSensitive.applyCostSensitive(fcrf3,fs.get(0),fs.get(1),false);	
-											evalibk = CostSensitive.applyCostSensitive(fcibk3,fs.get(0),fs.get(1),false);	
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-										
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"Smote"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"Smote"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"IBk"+","+"Smote"+","+"FS"+","+"Cost_Sensitive_Learning"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-										}
-									}
-									
-									
-									break;
-							}
-						}
-						
-					
-				}else {
-					Integer classIndex = assignBuggyValue(wf.get(0));
-					for(Instance instance: wf.get(0)) {
-						if (instance.value(instance.numAttributes() - 1) == classIndex) {
-							numDefectiveInTraining++;
-						}
-					}
-					
-					for(Instance instance: wf.get(1)) {
-						if (instance.value(instance.numAttributes() - 1) == classIndex) {
-							numDefectiveInTesting++;
-						}
-					}
-						for(Sampling samp: Sampling.values()) {
-							Evaluation evalnb;
-							Evaluation evalrf;
-							Evaluation evalibk;
-							
-							Float truePositivesnb;
-							Float falsePositivesnb;
-							Float trueNegativesnb;
-							Float falseNegativesnb;
-							
-							Float truePositivesrf;
-							Float falsePositivesrf;
-							Float trueNegativesrf;
-							Float falseNegativesrf;
-							
-							Float truePositivesibk;
-							Float falsePositivesibk;
-							Float trueNegativesibk;
-							Float falseNegativesibk;
-							switch(samp) {
-								case NOSAMPLING:
-									for(CostSensitiveEnum cse :  CostSensitiveEnum.values()) {
-										switch(cse) {
-											case NOCOST:
-												MetricsWeka mw = new MetricsWeka();
-												mw.setDatasetSize(datasetSize);
-												mw.setPercentualTraining((float) wf.get(0).numInstances());
-												mw.setNumTrainingVersions(i);
-												mw.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												int numAttributes = wf.get(0).numAttributes();
-												wf.get(0).setClassIndex(numAttributes - 1);
-												wf.get(1).setClassIndex(numAttributes - 1);
-												
-												
-												NaiveBayes nbClassifier = new NaiveBayes();
-												RandomForest rfClassifier = new RandomForest();
-												IBk ibkClassifier = new IBk();
-
-												nbClassifier.buildClassifier(wf.get(0));
-												rfClassifier.buildClassifier(wf.get(0));
-												ibkClassifier.buildClassifier(wf.get(0));
-												
-												evalnb = new Evaluation(wf.get(1));
-												evalrf = new Evaluation(wf.get(1));	
-												evalibk = new Evaluation(wf.get(1));	
-												
-												evalnb.evaluateModel(nbClassifier, wf.get(1)); 
-												evalrf.evaluateModel(rfClassifier, wf.get(1)); 
-												evalibk.evaluateModel(ibkClassifier, wf.get(1));
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-												
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"No_Balancing"+","+"No_FS"+","+"No_Cost"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"No_Balancing"+","+"No_FS"+","+"No_Cost"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"IBk"+","+"No_Balancing"+","+"No_FS"+","+"No_Cost"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-											case THRESHOLD:
-												MetricsWeka mw2 = new MetricsWeka();
-												mw2.setDatasetSize(datasetSize);
-												mw2.setPercentualTraining((float) wf.get(0).numInstances());
-												mw2.setNumTrainingVersions(i);
-												mw2.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw2.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												evalnb = CostSensitive.applyCostSensitive(new NaiveBayes(),wf.get(0),wf.get(1),true);
-												evalrf = CostSensitive.applyCostSensitive(new RandomForest(),wf.get(0),wf.get(1),true);	
-												evalibk = CostSensitive.applyCostSensitive(new IBk(),wf.get(0),wf.get(1),true);	
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"No_Balancing"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"No_Balancing"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"IBk"+","+"No_Balancing"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-											case LEARNING:
-												MetricsWeka mw3 = new MetricsWeka();
-												mw3.setDatasetSize(datasetSize);
-												mw3.setPercentualTraining((float) wf.get(0).numInstances());
-												mw3.setNumTrainingVersions(i);
-												mw3.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw3.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												evalnb = CostSensitive.applyCostSensitive(new NaiveBayes(),wf.get(0),wf.get(1),false);
-												evalrf = CostSensitive.applyCostSensitive(new RandomForest(),wf.get(0),wf.get(1),false);	
-												evalibk = CostSensitive.applyCostSensitive(new IBk(),wf.get(0),wf.get(1),false);	
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"No_Balancing"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"No_Balancing"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"IBk"+","+"No_Balancing"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-										}
-									}
-									
-									break;
-								case UNDERSAMPLING:
-									
-									FilteredClassifier fcnb = Balancing.underSampling( new NaiveBayes());
-									FilteredClassifier fcrf = Balancing.underSampling( new RandomForest());
-									FilteredClassifier fcibk = Balancing.underSampling( new IBk());
-									
-									for(CostSensitiveEnum cse :  CostSensitiveEnum.values()) {
-										switch(cse) {
-											case NOCOST:
-												MetricsWeka mw = new MetricsWeka();
-												mw.setDatasetSize(datasetSize);
-												mw.setPercentualTraining((float) wf.get(0).numInstances());
-												mw.setNumTrainingVersions(i);
-												mw.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												int numAttributes = wf.get(0).numAttributes();
-												wf.get(0).setClassIndex(numAttributes - 1);
-												wf.get(1).setClassIndex(numAttributes - 1);
-												
-												fcnb.buildClassifier(wf.get(0));
-												fcrf.buildClassifier(wf.get(0));
-												fcibk.buildClassifier(wf.get(0));
-												
-												evalnb = new Evaluation(wf.get(1));
-												evalrf = new Evaluation(wf.get(1));	
-												evalibk = new Evaluation(wf.get(1));	
-												
-												evalnb.evaluateModel(fcnb, wf.get(1)); 
-												evalrf.evaluateModel(fcrf, wf.get(1)); 
-												evalibk.evaluateModel(fcibk, wf.get(1));
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-												
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"UnderSampling"+","+"No_FS"+","+"No_Cost"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"UnderSampling"+","+"No_FS"+","+"No_Cost"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"IBk"+","+"UnderSampling"+","+"No_FS"+","+"No_Cost"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-												
-											case THRESHOLD:
-												MetricsWeka mw2 = new MetricsWeka();
-												mw2.setDatasetSize(datasetSize);
-												mw2.setPercentualTraining((float) wf.get(0).numInstances());
-												mw2.setNumTrainingVersions(i);
-												mw2.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw2.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												evalnb = CostSensitive.applyCostSensitive(fcnb,wf.get(0),wf.get(1),true);
-												evalrf = CostSensitive.applyCostSensitive(fcrf,wf.get(0),wf.get(1),true);	
-												evalibk = CostSensitive.applyCostSensitive(fcibk,wf.get(0),wf.get(1),true);	
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"UnderSampling"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"UnderSampling"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"IBk"+","+"UnderSampling"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-
-											case LEARNING:
-												MetricsWeka mw3 = new MetricsWeka();
-												mw3.setDatasetSize(datasetSize);
-												mw3.setPercentualTraining((float) wf.get(0).numInstances());
-												mw3.setNumTrainingVersions(i);
-												mw3.setPercDefectiveInTraining(numDefectiveInTraining);
-												mw3.setPercDefectiveInTesting(numDefectiveInTesting);
-												
-												evalnb = CostSensitive.applyCostSensitive(fcnb,wf.get(0),wf.get(1),false);
-												evalrf = CostSensitive.applyCostSensitive(fcrf,wf.get(0),wf.get(1),false);	
-												evalibk = CostSensitive.applyCostSensitive(fcibk,wf.get(0),wf.get(1),false);	
-												
-												truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-												falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-												trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-												falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-												
-												truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-												falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-												trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-												falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-												
-												truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-												falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-												trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-												falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"UnderSampling"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"UnderSampling"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-												rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"IBk"+","+"UnderSampling"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-												break;
-										}
-									}
-									break;
-								case OVERSAMPLING:
-									FilteredClassifier fcnb2 = Balancing.overSampling( new NaiveBayes(),wf.get(0));
-									FilteredClassifier fcrf2 = Balancing.overSampling( new RandomForest(),wf.get(0));
-									FilteredClassifier fcibk2 = Balancing.overSampling( new IBk(),wf.get(0));
-									for(CostSensitiveEnum cse :  CostSensitiveEnum.values()) {
-										switch(cse) {
-										case NOCOST:
-											MetricsWeka mw = new MetricsWeka();
-											mw.setDatasetSize(datasetSize);
-											mw.setPercentualTraining((float) wf.get(0).numInstances());
-											mw.setNumTrainingVersions(i);
-											mw.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											int numAttributes = wf.get(0).numAttributes();
-											wf.get(0).setClassIndex(numAttributes - 1);
-											wf.get(1).setClassIndex(numAttributes - 1);
-											
-											fcnb2.buildClassifier(wf.get(0));
-											fcrf2.buildClassifier(wf.get(0));
-											fcibk2.buildClassifier(wf.get(0));
-											
-											evalnb = new Evaluation(wf.get(1));
-											evalrf = new Evaluation(wf.get(1));	
-											evalibk = new Evaluation(wf.get(1));	
-											
-											evalnb.evaluateModel(fcnb2, wf.get(1)); 
-											evalrf.evaluateModel(fcrf2, wf.get(1)); 
-											evalibk.evaluateModel(fcibk2, wf.get(1));
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"OverSampling"+","+"No_FS"+","+"No_Cost"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"OverSampling"+","+"No_FS"+","+"No_Cost"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"IBk"+","+"OverSampling"+","+"No_FS"+","+"No_Cost"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-											
-										case THRESHOLD:
-											MetricsWeka mw2 = new MetricsWeka();
-											mw2.setDatasetSize(datasetSize);
-											mw2.setPercentualTraining((float) wf.get(0).numInstances());
-											mw2.setNumTrainingVersions(i);
-											mw2.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw2.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											evalnb = CostSensitive.applyCostSensitive(fcnb2,wf.get(0),wf.get(1),true);
-											evalrf = CostSensitive.applyCostSensitive(fcrf2,wf.get(0),wf.get(1),true);	
-											evalibk = CostSensitive.applyCostSensitive(fcibk2,wf.get(0),wf.get(1),true);	
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-										
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"OverSampling"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"OverSampling"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"IBk"+","+"OverSampling"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-
-										case LEARNING:
-											MetricsWeka mw3 = new MetricsWeka();
-											mw3.setDatasetSize(datasetSize);
-											mw3.setPercentualTraining((float) wf.get(0).numInstances());
-											mw3.setNumTrainingVersions(i);
-											mw3.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw3.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											evalnb = CostSensitive.applyCostSensitive(fcnb2,wf.get(0),wf.get(1),false);
-											evalrf = CostSensitive.applyCostSensitive(fcrf2,wf.get(0),wf.get(1),false);	
-											evalibk = CostSensitive.applyCostSensitive(fcibk2,wf.get(0),wf.get(1),false);	
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-										
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"OverSampling"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"OverSampling"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"IBk"+","+"OverSampling"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-									}
-									}
-									break;
-								case SMOTE:
-									FilteredClassifier fcnb3 = Balancing.smote( new NaiveBayes(),wf.get(0),numDefectiveInTraining);
-									FilteredClassifier fcrf3 = Balancing.smote( new RandomForest(),wf.get(0),numDefectiveInTraining);
-									FilteredClassifier fcibk3 = Balancing.smote( new IBk(),wf.get(0),numDefectiveInTraining);
-									for(CostSensitiveEnum cse :  CostSensitiveEnum.values()) {
-										switch(cse) {
-										case NOCOST:
-											MetricsWeka mw = new MetricsWeka();
-											mw.setDatasetSize(datasetSize);
-											mw.setPercentualTraining((float) wf.get(0).numInstances());
-											mw.setNumTrainingVersions(i);
-											mw.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											int numAttributes = wf.get(0).numAttributes();
-											wf.get(0).setClassIndex(numAttributes - 1);
-											wf.get(1).setClassIndex(numAttributes - 1);
-											
-											fcnb3.buildClassifier(wf.get(0));
-											fcrf3.buildClassifier(wf.get(0));
-											fcibk3.buildClassifier(wf.get(0));
-											
-											evalnb = new Evaluation(wf.get(1));
-											evalrf = new Evaluation(wf.get(1));	
-											evalibk = new Evaluation(wf.get(1));	
-											
-											evalnb.evaluateModel(fcnb3, wf.get(1)); 
-											evalrf.evaluateModel(fcrf3, wf.get(1)); 
-											evalibk.evaluateModel(fcibk3, wf.get(1));
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-											
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"Smote"+","+"No_FS"+","+"No_Cost"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"Smote"+","+"No_FS"+","+"No_Cost"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+"IBk"+","+"Smote"+","+"No_FS"+","+"No_Cost"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-											
-										case THRESHOLD:
-											MetricsWeka mw2 = new MetricsWeka();
-											mw2.setDatasetSize(datasetSize);
-											mw2.setPercentualTraining((float) wf.get(0).numInstances());
-											mw2.setNumTrainingVersions(i);
-											mw2.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw2.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											evalnb = CostSensitive.applyCostSensitive(fcnb3,wf.get(0),wf.get(1),true);
-											evalrf = CostSensitive.applyCostSensitive(fcrf3,wf.get(0),wf.get(1),true);	
-											evalibk = CostSensitive.applyCostSensitive(fcibk3,wf.get(0),wf.get(1),true);	
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-										
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"Smote"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"Smote"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw2.getPercentualTraining().toString()+","+mw2.getPercDefectiveInTraining().toString()+","+mw2.getPercDefectiveInTesting().toString()+","+"IBk"+","+"Smote"+","+"No_FS"+","+"Cost_Sensitive_Threshold"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-
-										case LEARNING:
-											MetricsWeka mw3 = new MetricsWeka();
-											mw3.setDatasetSize(datasetSize);
-											mw3.setPercentualTraining((float) wf.get(0).numInstances());
-											mw3.setNumTrainingVersions(i);
-											mw3.setPercDefectiveInTraining(numDefectiveInTraining);
-											mw3.setPercDefectiveInTesting(numDefectiveInTesting);
-											
-											evalnb = CostSensitive.applyCostSensitive(fcnb3,wf.get(0),wf.get(1),false);
-											evalrf = CostSensitive.applyCostSensitive(fcrf3,wf.get(0),wf.get(1),false);	
-											evalibk = CostSensitive.applyCostSensitive(fcibk3,wf.get(0),wf.get(1),false);	
-											
-											truePositivesnb = (float) evalnb.numTruePositives(classIndex);
-											falsePositivesnb = (float) evalnb.numFalsePositives(classIndex);
-											trueNegativesnb = (float) evalnb.numTrueNegatives(classIndex);
-											falseNegativesnb = (float) evalnb.numFalseNegatives(classIndex);
-											
-											truePositivesrf = (float) evalrf.numTruePositives(classIndex);
-											falsePositivesrf = (float) evalrf.numFalsePositives(classIndex);
-											trueNegativesrf = (float) evalrf.numTrueNegatives(classIndex);
-											falseNegativesrf = (float) evalrf.numFalseNegatives(classIndex);
-											
-											truePositivesibk = (float) evalibk.numTruePositives(classIndex);
-											falsePositivesibk = (float) evalibk.numFalsePositives(classIndex);
-											trueNegativesibk = (float) evalibk.numTrueNegatives(classIndex);
-											falseNegativesibk = (float) evalibk.numFalseNegatives(classIndex);
-										
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"NaiveBayes"+","+"Smote"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesnb.toString()+","+falsePositivesnb.toString()+","+trueNegativesnb.toString()+","+falseNegativesnb.toString()+","+evalnb.precision(classIndex)+","+evalnb.recall(classIndex)+","+evalnb.areaUnderROC(classIndex)+","+evalnb.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"RandomForest"+","+"Smote"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesrf.toString()+","+falsePositivesrf.toString()+","+trueNegativesrf.toString()+","+falseNegativesrf.toString()+","+evalrf.precision(classIndex)+","+evalrf.recall(classIndex)+","+evalrf.areaUnderROC(classIndex)+","+evalrf.kappa()+"\n");
-											rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw3.getPercentualTraining().toString()+","+mw3.getPercDefectiveInTraining().toString()+","+mw3.getPercDefectiveInTesting().toString()+","+"IBk"+","+"Smote"+","+"No_FS"+","+"Cost_Sensitive_Learning"+","+truePositivesibk.toString()+","+falsePositivesibk.toString()+","+trueNegativesibk.toString()+","+falseNegativesibk.toString()+","+evalibk.precision(classIndex)+","+evalibk.recall(classIndex)+","+evalibk.areaUnderROC(classIndex)+","+evalibk.kappa()+"\n");
-											break;
-										}
-									}
-									
-									
-									break;
-							}
-						}
-				}	
-			
-			}
 		}
-	}
+	  }
 	}
 }
 	

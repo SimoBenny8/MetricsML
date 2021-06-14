@@ -52,8 +52,13 @@ public class Balancing {
 	}
 	
 	public static void main(String[] args) {
-		Float r = (float) 1000.0;
-		System.out.println(r.toString());
+		
+		int items = -2000;
+		
+		for(int i = 0; i< items; i++) {
+			
+		}
+//		System.out.println(r.toString());
 	}
 
 }
