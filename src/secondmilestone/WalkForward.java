@@ -304,43 +304,44 @@ public class WalkForward {
 	
 	public static void main(String[] args) throws IOException{
 		
-		File file = new File(projects[0].toUpperCase()+"_Dataset.arff");
-		List<Instances> wf = new ArrayList<>();
-		ArffLoader loader = new ArffLoader();
-		loader.setSource(file);
-		Instances data = loader.getDataSet();//get instances object
-	try(BufferedWriter rw = new BufferedWriter(new FileWriter(projects[0].toUpperCase()+"_Results_Weka"+".csv", true))){
+		
+		for(Integer k = 0; k<projects.length;k++) {
+			File file = new File(projects[k].toUpperCase()+"_Dataset.arff");
+			List<Instances> wf = new ArrayList<>();
+			ArffLoader loader = new ArffLoader();
+			loader.setSource(file);
+			Instances data = loader.getDataSet();//get instances object
+			try(BufferedWriter rw = new BufferedWriter(new FileWriter(projects[k].toUpperCase()+"_Results_Weka"+".csv", true))){
 			
-			for(Integer j = 0; j<columns.length - 1; j++) {
-				rw.append(columns[j] + ",");
+				for(Integer j = 0; j<columns.length - 1; j++) {
+					rw.append(columns[j] + ",");
 				
+				}
+				rw.append(columns[columns.length-1]);
+				rw.append("\n");
+		
+				AttributeStats as = data.attributeStats(0); //version column
+				Stats s = as.numericStats;
+				Double maxVersion = s.max;	
+		
+				for(Integer i = 1; i< maxVersion; i++) {
+			
+		
+					wf = applyWalkForward(file,i,maxVersion);
+					Integer classIndex = assignBuggyValue(wf.get(0));
+					List<Instances> fs = FeatureSelection.applyFeatureSelection(wf.get(0),wf.get(1));
+			
+					valutationToCsv(wf.get(0), wf.get(1),classIndex,i, rw, "No_FS");
+					valutationToCsv(fs.get(0), fs.get(1),classIndex,i, rw, "FS");
+		
+			
+				}
+			} catch (Exception e) {
+		
+				e.printStackTrace();
 			}
-			rw.append(columns[columns.length-1]);
-			rw.append("\n");
-		
-			AttributeStats as = data.attributeStats(0); //version column
-			Stats s = as.numericStats;
-			Double maxVersion = s.max;	
-		
-		for(Integer i = 1; i< maxVersion; i++) {
-			
-		
-			wf = applyWalkForward(file,i,maxVersion);
-			
-			Integer classIndex = assignBuggyValue(wf.get(0));
-			List<Instances> fs = FeatureSelection.applyFeatureSelection(wf.get(0),wf.get(1));
-			
-			valutationToCsv(wf.get(0), wf.get(1),classIndex,i, rw, "No_FS");
-			valutationToCsv(fs.get(0), fs.get(1),classIndex,i, rw, "FS");
-		
 			
 		}
-	  } catch (Exception e) {
-		
-		e.printStackTrace();
-	}
-	
-		
 	}
 }
 	
