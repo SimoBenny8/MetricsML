@@ -23,8 +23,9 @@ public class CsvToArff {
 	private static String[] proj = {"Bookkeeper","Storm"};
 	private static String path = "src/Files/";
 	
-	public static void arffCreation(File projectClasses) throws Exception {
+	public static void arffCreation(File projectClasses){
 		
+	 try {	
 		if (projectClasses.exists()) {
 			CSVLoader loader = new CSVLoader();
 			loader.setFieldSeparator(",");
@@ -46,6 +47,9 @@ public class CsvToArff {
 		    saver.setFile(new File(projectClasses.getName()+".arff"));
 		    saver.writeBatch();
 		}
+	 }catch(Exception e) {
+		 e.printStackTrace();
+	 }
 		
 	}
 	

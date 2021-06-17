@@ -11,7 +11,7 @@ public class CostSensitive {
 	
 	 private CostSensitive() {
 		    throw new IllegalStateException("Utility class");
-		  }
+	 }
 
 	
 	private static CostMatrix createCostMatrix(double weightFalsePositive, double weightFalseNegative) {
@@ -23,8 +23,9 @@ public class CostSensitive {
 	    return costMatrix;
 	}
 	
-	public static Evaluation applyCostSensitive(AbstractClassifier ac,Instances trainingSet,Instances testingSet,Boolean threshold) throws Exception{
-		
+	public static Evaluation applyCostSensitive(AbstractClassifier ac,Instances trainingSet,Instances testingSet,Boolean threshold){
+		Evaluation eval = null; 
+	try {	
 		CostSensitiveClassifier c1 = new CostSensitiveClassifier();
 		c1.setClassifier(ac);
 
@@ -32,9 +33,11 @@ public class CostSensitive {
 		c1.buildClassifier(trainingSet);
 		c1.setMinimizeExpectedCost(threshold);
 
-		Evaluation eval = new Evaluation(testingSet,c1.getCostMatrix());
+		eval = new Evaluation(testingSet,c1.getCostMatrix());
 		eval.evaluateModel(c1, testingSet);
-		
+	 }catch (Exception e) {
+		 e.printStackTrace();
+	 }
 	    
 	    return eval;
 		

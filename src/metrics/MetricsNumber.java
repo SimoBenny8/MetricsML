@@ -160,10 +160,7 @@ public class MetricsNumber {
 			try (Git git = new Git(repo)) {
 				
 					RevWalk walk = new RevWalk(repo);
-					Date until = new SimpleDateFormat("yyyy-MM-dd").parse(dateVersion.get(version));
-					RevFilter before = CommitTimeRevFilter.before(until);
-					//List<RevCommit> commits = call(repo, className, dateVersion, version);
-					Iterable<RevCommit> commits = git.log().all().setRevFilter(before).addPath(className).call();
+					List<RevCommit> commits = call(repo, className, dateVersion, version);
 					
 				for(RevCommit commit: commits) {	
 					if(commit.getParentCount() != 0) {
@@ -189,10 +186,6 @@ public class MetricsNumber {
 					
 				walk.close();
 			}
-			//System.out.println("revisioni:"+this.numRevision +"\n"+"locDeleted:"+ this.locDeleted+"\n"+"locAdded:"+ this.locAdded+"churn:"+this.churn);
-			//System.out.println("maxChurn:"+this.maxChurn +"\n"+"maxLocAdded:"+ this.maxLocAdded+"\n"+"avgLocAdded:"+ getAvgLocAdded());
-			//System.out.println("loc:"+this.loc +"\n"+"locTouched:"+ this.locTouched+"\n"+"chgSetSize:"+ this.chgSetSize);
-			//System.out.println("avgChgSetSize:"+getAvgChgSetSize() +"\n"+"maxChgSetSize:"+ this.maxChgSetSize);
 			metrics.add(this.loc);	
 			metrics.add(this.locTouched);
 			metrics.add(this.numRevision);

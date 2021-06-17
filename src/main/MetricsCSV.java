@@ -120,7 +120,7 @@ public class MetricsCSV {
 							
 							
 							if(!fv.equals(ov)) {
-								iv = (int) Math.round((double)fv - (double)(fv-ov)*p[numVersion - 1]); 
+								iv = (int) Math.round((double)fv - (fv-ov)*p[numVersion - 1]); 
 								logger.log(Level.INFO,"iv calcolata: {0}", iv);
 								
 							}else {

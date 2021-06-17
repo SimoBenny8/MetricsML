@@ -14,22 +14,26 @@ public class Balancing {
 	}
 
 
-	public static FilteredClassifier underSampling(AbstractClassifier ac) throws Exception {
+	public static FilteredClassifier underSampling(AbstractClassifier ac){
 		
 		FilteredClassifier fc = new FilteredClassifier();
 		fc.setClassifier(ac);
 		SpreadSubsample  spreadSubsample = new SpreadSubsample();
 		String[] opts = new String[]{ "-M", "1.0"};
-		spreadSubsample.setOptions(opts);
+		try {
+			spreadSubsample.setOptions(opts);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 		fc.setFilter(spreadSubsample);
 		return fc;
 	}
 	
 	
-	public static FilteredClassifier smote(AbstractClassifier ac,Instances trainingSet,Integer numDefectiveInTraining,Integer classIndex) throws Exception {
-		
-		String[] opts;
+	public static FilteredClassifier smote(AbstractClassifier ac,Instances trainingSet,Integer numDefectiveInTraining,Integer classIndex){
 		FilteredClassifier fc = new FilteredClassifier();
+	 try {	
+		String[] opts;
 		fc.setClassifier(ac);
 		SMOTE smote = new SMOTE();
 		smote.setInputFormat(trainingSet);
@@ -37,13 +41,16 @@ public class Balancing {
 		opts = new String[] {"-P", numPercentual.toString(),"-K","1","-C",classIndex.toString()};
 		smote.setOptions(opts);
 		fc.setFilter(smote);
+	 }catch (Exception e) {
+		 e.printStackTrace();
+	 }
 		return fc;
 	}
 	
-	public static FilteredClassifier overSampling(AbstractClassifier ac,Instances trainingSet) throws Exception { 
-		
-		String[] opts;
+	public static FilteredClassifier overSampling(AbstractClassifier ac,Instances trainingSet){ 
 		FilteredClassifier fc = new FilteredClassifier();
+	 try {	
+		String[] opts;
 		fc.setClassifier(ac);
 		Resample resample = new Resample();
 		resample.setInputFormat(trainingSet);
@@ -51,6 +58,9 @@ public class Balancing {
 		opts = new String[]{ "-B", "1.0","-S","1", "-Z", "100.0"};
 		resample.setOptions(opts);
 		fc.setFilter(resample);
+	 }catch (Exception e) {
+		 e.printStackTrace();
+	 }
 		
 		return fc;
 		

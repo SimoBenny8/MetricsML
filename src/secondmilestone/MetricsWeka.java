@@ -16,7 +16,7 @@ public class MetricsWeka {
 	}
 
 	public void setPercentualTraining(Float trainingSetSize) {
-		this.percentualTraining = (((float) trainingSetSize/(float) getDatasetSize()) * 100);
+		this.percentualTraining = ((trainingSetSize/(float) getDatasetSize()) * 100);
 	}
 
 

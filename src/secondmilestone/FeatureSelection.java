@@ -17,14 +17,13 @@ public class FeatureSelection {
 
 
 	
-	public static List<Instances> applyFeatureSelection(Instances trainingSet,Instances testingSet) throws Exception{
+	public static List<Instances> applyFeatureSelection(Instances trainingSet,Instances testingSet){
+		List<Instances> result = new ArrayList<>();
+	 try {	
 		AttributeSelection filter = new AttributeSelection();
 		//create evaluator and search algorithm objects
 		CfsSubsetEval cfsEval = new CfsSubsetEval();
 		GreedyStepwise search = new GreedyStepwise();
-		
-		List<Instances> result = new ArrayList<>();
-		
 		//set the algorithm to search backward
 		search.setSearchBackwards(true);
 		//set the filter to use the evaluator and search algorithm
@@ -37,6 +36,9 @@ public class FeatureSelection {
 		
 		result.add(trainingSetFiltered);
 		result.add(testingSetFiltered);
+	 }catch(Exception e) {
+		 e.printStackTrace();
+	 }
 		
 		return result;
 		
