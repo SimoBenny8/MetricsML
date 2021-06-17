@@ -14,7 +14,10 @@ import org.json.JSONArray;
 
 public class RetrieveTicketsID {
 	
-
+	private static String urlJira ="https://issues.apache.org/jira/rest/api/latest/issue/";
+	private static String keyJson = "fields";
+	
+	
 	private RetrieveTicketsID() {
 	    throw new IllegalStateException("Utility class");
 	  }
@@ -81,14 +84,14 @@ public class RetrieveTicketsID {
    
    
    public static String getIV(String ticket) throws IOException, JSONException{
-	   //TODO: trasformarla in versione numerica 
+
 	  
 	   	 Integer i = 0;
 	   	 
       
-         String url = "https://issues.apache.org/jira/rest/api/latest/issue/"+ ticket;
+         String url = urlJira+ ticket;
          JSONObject json = readJsonFromUrl(url);
-         JSONObject fields = json.getJSONObject("fields");
+         JSONObject fields = json.getJSONObject(keyJson);
          JSONArray versions = fields.getJSONArray("versions");
          if(versions.length() != 0 ) {
             if (versions.getJSONObject(0).has("name")) {
@@ -104,14 +107,13 @@ public class RetrieveTicketsID {
    }
    
    public static String getFV(String ticket) throws IOException, JSONException{
-	   //TODO: vedere caso con più versioni 
-	   //TODO: If name = "", use closing commit date of the ticket and compare it with commit date of the versions 
+	
 	   Integer i = 0;
 	   String name = "";
     
-       String url = "https://issues.apache.org/jira/rest/api/latest/issue/"+ ticket;
+       String url = urlJira+ ticket;
        JSONObject json = readJsonFromUrl(url);
-       JSONObject fields = json.getJSONObject("fields");
+       JSONObject fields = json.getJSONObject(keyJson);
        JSONArray versions = fields.getJSONArray("fixVersions");
        for (i = 0; i < versions.length(); i++ ) {
           
@@ -120,7 +122,7 @@ public class RetrieveTicketsID {
           }
                
           }
-       System.out.println(name);
+  
     
     return name;
     
@@ -130,31 +132,17 @@ public class RetrieveTicketsID {
    public static String creationDateTicket(String ticket) throws JSONException, IOException {
 	   
 	   String date = "";
-	   String url = "https://issues.apache.org/jira/rest/api/latest/issue/"+ ticket;
+	   String url = urlJira+ ticket;
        JSONObject json = readJsonFromUrl(url);
-       JSONObject fields = json.getJSONObject("fields");
+       JSONObject fields = json.getJSONObject(keyJson);
        String createdDate = fields.get("created").toString();
        date = createdDate.substring(0,10);
-     
-      // System.out.println(date);
-	   
+    
 	   
 	   return date;
    }
    
    
-   
-   public static void main(String[] args) {
-	   
-	   try {
-	//List<String> ls = getTicketId("STORM",0);
-	 System.out.println(getIV("BOOKKEEPER-442"));
-		   //creationDateTicket("STORM-235");
-	} catch (JSONException|IOException e) {
-		
-		e.printStackTrace();
-	} 
-	   
-   }
- 
 }
+ 
+

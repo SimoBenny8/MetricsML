@@ -8,6 +8,11 @@ import weka.filters.supervised.instance.Resample;
 import weka.filters.supervised.instance.SMOTE;
 
 public class Balancing {
+	
+	private Balancing() {
+		    throw new IllegalStateException("Weka class");
+	}
+
 
 	public static FilteredClassifier underSampling(AbstractClassifier ac) throws Exception {
 		
@@ -21,7 +26,7 @@ public class Balancing {
 	}
 	
 	
-	public static FilteredClassifier smote(AbstractClassifier ac,Instances trainingSet,Integer numDefectiveInTraining) throws Exception {
+	public static FilteredClassifier smote(AbstractClassifier ac,Instances trainingSet,Integer numDefectiveInTraining,Integer classIndex) throws Exception {
 		
 		String[] opts;
 		FilteredClassifier fc = new FilteredClassifier();
@@ -29,7 +34,7 @@ public class Balancing {
 		SMOTE smote = new SMOTE();
 		smote.setInputFormat(trainingSet);
 		Float numPercentual = (float) Math.round((float) ((trainingSet.numInstances() - 2*numDefectiveInTraining)*100)/(float) numDefectiveInTraining);
-		opts = new String[] {"-P", numPercentual.toString()};
+		opts = new String[] {"-P", numPercentual.toString(),"-K","1","-C",classIndex.toString()};
 		smote.setOptions(opts);
 		fc.setFilter(smote);
 		return fc;
@@ -51,14 +56,4 @@ public class Balancing {
 		
 	}
 	
-	public static void main(String[] args) {
-		
-		int items = -2000;
-		
-		for(int i = 0; i< items; i++) {
-			
-		}
-//		System.out.println(r.toString());
-	}
-
 }

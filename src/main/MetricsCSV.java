@@ -30,9 +30,16 @@ public class MetricsCSV {
 	private ArrayList<String> id;
 	private static final Logger logger = Logger.getLogger(MetricsCSV.class.getName());
 	private static final String CMD = "cmd /c cd ";
+	private static String[] projects = {"Bookkeeper","Storm"};
 	private static Double[] pB = {1.0,1.0,0.667,0.667,0.667,0.778,1.25,1.271};
 	private static Double[] pS = {1.4,1.4,1.4,1.31,1.285,1.356,1.404,1.378,1.352,1.491,1.582,1.582};
 	private static String[] columnsCsv = {"Project","Version","Filename","Size","LOC_Touched","NR","LOC_Added", "Max_LOC_Added","Avg_LOC_Added","Churn","Max_Churn","Avg_Churn","ChgSetSize","Max_ChgSetSize","Avg_ChgSetSize","Bugginess"};
+	
+	
+	public static String[] getColumnsCsv() {
+		return columnsCsv;
+	}
+
 	private static String fileNameBuggy = "classTouchedByCommitBuggy";
 	
 	
@@ -93,9 +100,14 @@ public class MetricsCSV {
 						Integer iv = null;
 						Integer fv;
 						String[] info = classProj.split(" ");
-						
+						Double[] p;
 						String avString = RetrieveTicketsID.getIV(info[0]);
 						Integer av = stringToVersion(nameProj, avString);
+						if(nameProj.equals(projects[0])) {
+							p = pB;
+						}else {
+							p = pS;
+						}
 						logger.log(Level.INFO,"rd not null and av: {0}", av);
 						
 						if(av == null) {
@@ -108,7 +120,7 @@ public class MetricsCSV {
 							
 							
 							if(!fv.equals(ov)) {
-								iv = (int) Math.round((double)fv - (double)(fv-ov)*pS[numVersion - 1]); 
+								iv = (int) Math.round((double)fv - (double)(fv-ov)*p[numVersion - 1]); 
 								logger.log(Level.INFO,"iv calcolata: {0}", iv);
 								
 							}else {
@@ -323,58 +335,43 @@ public class MetricsCSV {
 
 	public static void main(String[] args) {
 		
-		String namePrj = "STORM";
-		//List<Double> pS = new ArrayList<>();
-		String pathName = System.getProperties().getProperty("user.home")+File.separator+namePrj;
+		for(String proj:projects) {
 		
-		//new MetricsCSV("STORM", pathName);
+			String pathName = System.getProperties().getProperty("user.home")+File.separator+proj;
 		
-		List<String> lv = null;
+			new MetricsCSV(proj.toUpperCase(), pathName);
 		
-		try {
-			lv = CreationFileCSV.getInfoVersions("Storm",3);
-			//System.out.println((lv.size())/2);
-		} catch (JSONException|IOException e1) {
-			e1.printStackTrace();
-		}
+			List<String> lv = null;
 		
-		/*if(lv!= null) {
-		
-		for(Integer i= 0; i<((lv.size())/2)+1; i++) {	
 			try {
-				pS.add(MetricsCSV.proportionIncremental(namePrj, i+1));
-			} catch (JSONException | IOException | ParseException e) {
-			
-				e.printStackTrace();
+				lv = CreationFileCSV.getInfoVersions("Storm",3);
+			} catch (JSONException|IOException e1) {
+				e1.printStackTrace();
 			}
-		}
-	}
-		for(Double d: pS) {
-			System.out.println("p:"+d);
-		}
-		*/
 		
-		try(BufferedWriter rw = new BufferedWriter(new FileWriter(namePrj+"_Dataset"+".txt", true))){	
+		
+			try(BufferedWriter rw = new BufferedWriter(new FileWriter(proj+"_Dataset"+".csv", true))){	
 			
-			for(Integer i = 0; i<columnsCsv.length - 1; i++) {
-				rw.append(columnsCsv[i] + ",");
+				for(Integer i = 0; i<columnsCsv.length - 1; i++) {
+					rw.append(columnsCsv[i] + ",");
 				
-			}
-			rw.append(columnsCsv[columnsCsv.length-1]);
-			rw.append("\n");
-			
-			if(lv != null) {	
-				for(Integer j = 0;j<((lv.size())/2);j++) {
-					
-					Multimap<String,Integer> map = CreationFileCSV.toCsv(lv,pathName,"Storm",j+1);
-					writeOnFile(rw, namePrj,lv,map);
 				}
+				rw.append(columnsCsv[columnsCsv.length-1]);
+				rw.append("\n");
+			
+				if(lv != null) {	
+					for(Integer j = 0;j<((lv.size())/2);j++) {
+					
+						Multimap<String,Integer> map = CreationFileCSV.toCsv(lv,pathName,proj,j+1);
+						writeOnFile(rw, proj,lv,map);
+					}
 				
 				
-			}	
-		} catch (IOException e1) {
-			logger.log(Level.WARNING,"error during writing");
-			e1.printStackTrace();
+				}	
+			} catch (IOException e1) {
+				logger.log(Level.WARNING,"error during writing");
+				e1.printStackTrace();
+			}
 		}
 			
 	}

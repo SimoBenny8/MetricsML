@@ -40,11 +40,10 @@ enum CostSensitiveEnum{
 	CSLEARNING
 }
 
-
 public class WalkForward {
 	
 	private static String[] columns = {"Dataset", "#TrainingRelease", "%Training", "%Defective in training", "%Defective in testing", "Classifier", "Balancing", "FeatureSelection", "Sensitivity", "TP", "FP", "TN", "FN", "Precision", "Recall", "AUC", "Kappa"};
-	private static String[] projects = {"Storm"};
+	private static String[] projects = {"Bookkeeper","Storm"};
 	private static Integer datasetSize;
 	private static AbstractClassifier[] classifier = {new NaiveBayes(),new RandomForest(),new IBk()};
 	private static Integer numDefectiveInTraining;
@@ -139,7 +138,7 @@ public class WalkForward {
 				testing.setClassIndex(numAttributes - 1);
 				
 				switch(samp) {
-					
+				
 					case NOSAMPLING:
 						
 						classifier[j].buildClassifier(training);
@@ -168,11 +167,11 @@ public class WalkForward {
 						falseNegativesln = (float) evalLearning.numFalseNegatives(classIndex);
 						
 						
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"No_Balancing"+","+featureSel+","+"No_Cost"+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.NOSAMPLING.toString()+","+featureSel+","+CostSensitiveEnum.NOCOST.toString()+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
 						rw.flush();
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"No_Balancing"+","+featureSel+","+"Threshold"+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.NOSAMPLING.toString()+","+featureSel+","+CostSensitiveEnum.CSTHRESHOLD.toString()+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
 						rw.flush();
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"No_Balancing"+","+featureSel+","+"Learning"+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.NOSAMPLING.toString()+","+featureSel+","+CostSensitiveEnum.CSLEARNING.toString()+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
 						rw.flush();
 						break;
 					case UNDERSAMPLING:
@@ -204,11 +203,11 @@ public class WalkForward {
 						falseNegativesln = (float) evalLearning.numFalseNegatives(classIndex);
 						
 					
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Undersampling"+","+featureSel+","+"No_Cost"+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.UNDERSAMPLING.toString()+","+featureSel+","+CostSensitiveEnum.NOCOST.toString()+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
 						rw.flush();
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Undersampling"+","+featureSel+","+"Threshold"+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.UNDERSAMPLING.toString()+","+featureSel+","+CostSensitiveEnum.CSTHRESHOLD.toString()+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
 						rw.flush();
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Undersampling"+","+featureSel+","+"Learning"+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.UNDERSAMPLING.toString()+","+featureSel+","+CostSensitiveEnum.CSLEARNING.toString()+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
 						rw.flush();
 						break;
 						
@@ -241,17 +240,17 @@ public class WalkForward {
 						falseNegativesln = (float) evalLearning.numFalseNegatives(classIndex);
 						
 						
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Oversampling"+","+featureSel+","+"No_Cost"+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.OVERSAMPLING.toString()+","+featureSel+","+CostSensitiveEnum.NOCOST.toString()+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
 						rw.flush();
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Oversampling"+","+featureSel+","+"Threshold"+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.OVERSAMPLING.toString()+","+featureSel+","+CostSensitiveEnum.CSTHRESHOLD.toString()+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
 						rw.flush();
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Oversampling"+","+featureSel+","+"Learning"+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.OVERSAMPLING.toString()+","+featureSel+","+CostSensitiveEnum.CSLEARNING.toString()+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
 						rw.flush();
 						break;
 						
 					case SMOTE:
 						
-						fcsmote = Balancing.smote( classifier[j],training,numDefectiveInTraining);
+						fcsmote = Balancing.smote( classifier[j],training,numDefectiveInTraining,classIndex);
 						
 						fcsmote.buildClassifier(training);
 						
@@ -279,14 +278,15 @@ public class WalkForward {
 						falseNegativesln = (float) evalLearning.numFalseNegatives(classIndex);
 						
 						
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Smote"+","+featureSel+","+"No_Cost"+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.SMOTE.toString()+","+featureSel+","+CostSensitiveEnum.NOCOST.toString()+","+truePositives.toString()+","+falsePositives.toString()+","+trueNegatives.toString()+","+falseNegatives.toString()+","+evalNoCost.precision(classIndex)+","+evalNoCost.recall(classIndex)+","+evalNoCost.areaUnderROC(classIndex)+","+evalNoCost.kappa()+"\n");
 						rw.flush();
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Smote"+","+featureSel+","+"Threshold"+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.SMOTE.toString()+","+featureSel+","+CostSensitiveEnum.CSTHRESHOLD.toString()+","+truePositivesth.toString()+","+falsePositivesth.toString()+","+trueNegativesth.toString()+","+falseNegativesth.toString()+","+evalThreshold.precision(classIndex)+","+evalThreshold.recall(classIndex)+","+evalThreshold.areaUnderROC(classIndex)+","+evalThreshold.kappa()+"\n");
 						rw.flush();
-						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+"Smote"+","+featureSel+","+"Learning"+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
+						rw.append(projects[0].toUpperCase()+","+i.toString()+","+mw.getPercentualTraining().toString()+","+mw.getPercDefectiveInTraining().toString()+","+mw.getPercDefectiveInTesting().toString()+","+getNameClassifier(classifier[j],j)+","+Sampling.SMOTE.toString()+","+featureSel+","+CostSensitiveEnum.CSLEARNING.toString()+","+truePositivesln.toString()+","+falsePositivesln.toString()+","+trueNegativesln.toString()+","+falseNegativesln.toString()+","+evalLearning.precision(classIndex)+","+evalLearning.recall(classIndex)+","+evalLearning.areaUnderROC(classIndex)+","+evalLearning.kappa()+"\n");
 						rw.flush();
 						
 						break;
+						
 					
 				}
 			}	
@@ -307,6 +307,8 @@ public class WalkForward {
 		else
 			return nameC[0];
 	}
+	
+	
 	
 	
 	public static void main(String[] args) throws Exception {
@@ -338,6 +340,7 @@ public class WalkForward {
 				e.printStackTrace();
 			}
 			
+		
 			Integer classIndex = assignBuggyValue(wf.get(0));
 			List<Instances> fs = FeatureSelection.applyFeatureSelection(wf.get(0),wf.get(1));
 			
@@ -347,6 +350,8 @@ public class WalkForward {
 			
 		}
 	  }
+	
+		
 	}
 }
 	

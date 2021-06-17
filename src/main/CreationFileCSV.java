@@ -1,7 +1,8 @@
 package main;
 
 import java.io.*;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -28,7 +29,7 @@ public class CreationFileCSV {
 	
 	
 	private static final Logger logger = Logger.getLogger(CreationFileCSV.class.getName());
-	private static String[] projects = {"Storm"};
+	private static String[] projects = {"Bookkeeper","Storm"};
 	private static final String ERRORSTR = "Exception found";
 	private static final String CMD = "cmd /c cd ";
 	
@@ -180,7 +181,7 @@ public class CreationFileCSV {
 		
 		
 		
-	/*	for(String proj: projects) {
+	for(String proj: projects) {
 			
 			String pathName = System.getProperties().getProperty("user.home")+File.separator+proj;
 			
@@ -200,16 +201,9 @@ public class CreationFileCSV {
 			
 				
 		
-			}*/
+			}
 		
-		try {
-			Multimap<String,Integer> id = idCommitToVersionProject("c75de7e7e63f282f44306d7bd0635a7a9be5e925","Storm",5);
-			String[] keys = id.keySet().stream().sorted().toArray(String[]::new);
-			System.out.println((23/2));
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		
 		}
 	}
 
