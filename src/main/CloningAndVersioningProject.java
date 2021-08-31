@@ -24,11 +24,11 @@ import com.google.common.collect.Multimap;
 
 
 
-public class CreationFileCSV {
+public class CloningAndVersioningProject {
 	
 	
 	
-	private static final Logger logger = Logger.getLogger(CreationFileCSV.class.getName());
+	private static final Logger logger = Logger.getLogger(CloningAndVersioningProject.class.getName());
 	private static String[] projects = {"Bookkeeper","Storm"};
 	private static final String ERRORSTR = "Exception found";
 	private static final String CMD = "cmd /c cd ";
@@ -37,10 +37,10 @@ public class CreationFileCSV {
 	public static void removeVersion(String nameProj,List<String> info) {
 		
 		if(nameProj.equals("Bookkeeper")) {
-			info.remove(3); //remove fourth version of bookkeeper
+			info.remove(3); //removing fourth version of bookkeeper
 		}else {
-			info.remove(4);
-			info.remove(8);//ninth version of storm
+			
+			info.remove(9);//removing tenth version of storm
 		}
 		
 		

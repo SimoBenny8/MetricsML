@@ -1,4 +1,4 @@
-package metrics;
+package secondmilestone;
 
 
 
@@ -40,7 +40,7 @@ import org.eclipse.jgit.treewalk.filter.PathFilter;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 import org.json.JSONException;
 
-import main.CreationFileCSV;
+import main.CloningAndVersioningProject;
 
 public class MetricsNumber {
 	
@@ -310,30 +310,5 @@ public class MetricsNumber {
 		return this.maxChgSetSize;
 	}
 
-
-	public static void main(String[] args) {
-		
-		List<String> lv = null;
-		
-		try {
-			lv = CreationFileCSV.getInfoVersions("Bookkeeper",3);
-		} catch (JSONException|IOException e1) {
-			e1.printStackTrace();
-		} 
-		
-		
-		
-		MetricsNumber mn = new MetricsNumber();
-		Repository rep = mn.setup("Bookkeeper");
-		mn.calculateMetrics(rep,1,"bookkeeper-server/src/main/java/org/apache/bookkeeper/bookie/Bookie.java",lv);
-		
-		
-		
-		/* revisioni:14
-		locDeleted:188
-		locAdded:1278
-		*/
-
-	}
 
 }

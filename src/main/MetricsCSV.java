@@ -22,7 +22,7 @@ import org.json.JSONException;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
 
-import metrics.MetricsNumber;
+import secondmilestone.MetricsNumber;
 
 
 public class MetricsCSV {
@@ -70,7 +70,7 @@ public class MetricsCSV {
 				}
 				
 					
-					File file = new File(nameProj + "TotalCommit.txt");
+					File file = new File(nameProj + "TotalBuggyCommit.txt");
 					//Get all ".java" from every commit ID linked to a ticket in Jira
 					try (Scanner scanner = new Scanner(file)){
 
@@ -204,7 +204,7 @@ public class MetricsCSV {
 	public static Integer stringToVersion(String nameProj, String ver) throws JSONException, IOException {
 		
 		if(ver != null) {
-			List<String> versions = CreationFileCSV.getInfoVersions(nameProj,2);
+			List<String> versions = CloningAndVersioningProject.getInfoVersions(nameProj,2);
 			for(Integer i = 0; i<versions.size(); i++) {
 				if(versions.get(i).equals(ver)) {
 					
@@ -220,7 +220,7 @@ public class MetricsCSV {
 		
 		SimpleDateFormat sdformat = new SimpleDateFormat("yyyy-MM-dd");
 		Date d1 = sdformat.parse(date);
-		List<String> dateVersions = CreationFileCSV.getInfoVersions(namePrj,3);
+		List<String> dateVersions = CloningAndVersioningProject.getInfoVersions(namePrj,3);
 		for (int i = 0; i< dateVersions.size(); i++) {
 			Date d2 = sdformat.parse(dateVersions.get(i));
 			//if d1 < d2
@@ -344,7 +344,7 @@ public class MetricsCSV {
 			List<String> lv = null;
 		
 			try {
-				lv = CreationFileCSV.getInfoVersions("Storm",3);
+				lv = CloningAndVersioningProject.getInfoVersions(proj,3);
 			} catch (JSONException|IOException e1) {
 				e1.printStackTrace();
 			}
@@ -362,7 +362,7 @@ public class MetricsCSV {
 				if(lv != null) {	
 					for(Integer j = 0;j<((lv.size())/2);j++) {
 					
-						Multimap<String,Integer> map = CreationFileCSV.toCsv(lv,pathName,proj,j+1);
+						Multimap<String,Integer> map = CloningAndVersioningProject.toCsv(lv,pathName,proj,j+1);
 						writeOnFile(rw, proj,lv,map);
 					}
 				

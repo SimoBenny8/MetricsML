@@ -60,15 +60,6 @@ public class IdCommit {
          
          }
          
-        
-    
-		
-	public static void main (String[] args) {
-		
-		Integer iv = (int) Math.round(4.5);
-		logger.log(Level.INFO,"numero: {0}",iv);
-    }
-       
 
 	
 
